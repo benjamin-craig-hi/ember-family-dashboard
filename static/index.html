@@ -11,8 +11,13 @@
   body { background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
   header { padding:18px 24px; font-size:1.6rem; font-weight:700; border-bottom:1px solid #262a33; }
   header span { color:var(--accent); }
-  main { flex:1; display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; padding:16px; overflow:hidden; }
-  .col { background:var(--panel); border-radius:12px; padding:16px; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* Calendar takes ~2/3; chores + notes stack in the right ~1/3 */
+  main { flex:1; display:grid; grid-template-columns:2fr 1fr; gap:16px; padding:16px; overflow:hidden; min-height:0; }
+
+  .cal-pane { background:var(--panel); border-radius:12px; padding:16px; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
+  .right-col { display:flex; flex-direction:column; gap:16px; overflow:hidden; min-height:0; }
+  .col { background:var(--panel); border-radius:12px; padding:16px; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
   .col h2 { font-size:1.1rem; margin-bottom:12px; color:var(--accent); }
   .list { flex:1; overflow-y:auto; }
   .item { background:#22262f; border-radius:8px; padding:10px 12px; margin-bottom:8px; }
@@ -21,6 +26,26 @@
   .add { display:flex; gap:8px; margin-top:10px; }
   .add input { flex:1; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:10px; font-size:1rem; }
   .add button { background:var(--accent); color:#111; border:none; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; }
+
+  /* ---- Calendar ---- */
+  .cal-toolbar { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .cal-toolbar h2 { font-size:1.25rem; color:var(--accent); flex:1; }
+  .cal-nav { background:#22262f; color:var(--text); border:1px solid #333a46; border-radius:8px; width:36px; height:36px; font-size:1.3rem; line-height:1; cursor:pointer; }
+  .cal-today { background:#22262f; color:var(--text); border:1px solid #333a46; border-radius:8px; padding:8px 14px; font-size:.9rem; cursor:pointer; }
+  .cal-weekdays { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:4px; }
+  .cal-weekdays span { text-align:center; color:var(--muted); font-size:.8rem; font-weight:600; }
+  .cal-grid { flex:1; display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr); gap:4px; min-height:0; }
+  .cal-cell { background:#22262f; border-radius:6px; padding:6px; overflow:hidden; display:flex; flex-direction:column; }
+  .cal-cell.empty { background:transparent; }
+  .cal-cell.today { outline:2px solid var(--accent); }
+  .cal-num { font-weight:700; color:var(--muted); font-size:.85rem; margin-bottom:3px; }
+  .cal-cell.today .cal-num { color:var(--accent); }
+  .cal-ev { background:#2a2f3a; border-radius:4px; padding:2px 5px; font-size:.72rem; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cal-ev-time { color:var(--accent); font-weight:600; }
+  .cal-upcoming-wrap { margin-top:10px; border-top:1px solid #262a33; padding-top:10px; }
+  .cal-upcoming-wrap h3 { font-size:.9rem; color:var(--muted); margin-bottom:6px; }
+  #cal-upcoming { max-height:120px; overflow-y:auto; }
+
   footer { display:flex; gap:12px; padding:12px 16px; border-top:1px solid #262a33; }
   #chatbox { flex:1; display:flex; gap:8px; }
   #chatbox input { flex:1; background:#1a1d24; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:12px; font-size:1rem; }
@@ -52,19 +77,33 @@
 <body>
 <header>Family <span>Dashboard</span></header>
 <main>
-  <div class="col">
-    <h2>Calendar</h2>
-    <div class="list" id="cal"></div>
+  <div class="cal-pane">
+    <div class="cal-toolbar">
+      <button class="cal-nav" onclick="calShift(-1)">&#8249;</button>
+      <h2 id="cal-title">Calendar</h2>
+      <button class="cal-nav" onclick="calShift(1)">&#8250;</button>
+      <button class="cal-today" onclick="calToday()">Today</button>
+    </div>
+    <div class="cal-weekdays">
+      <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div class="cal-upcoming-wrap">
+      <h3>Upcoming / unscheduled</h3>
+      <div class="list" id="cal-upcoming"></div>
+    </div>
   </div>
-  <div class="col">
-    <h2>Chores</h2>
-    <div class="list" id="chores"></div>
-    <div class="add"><input id="chore-in" placeholder="Add a chore..."><button onclick="addChore()">+</button></div>
-  </div>
-  <div class="col">
-    <h2>Notes</h2>
-    <div class="list" id="notes"></div>
-    <div class="add"><input id="note-in" placeholder="Add a note..."><button onclick="addNote()">+</button></div>
+  <div class="right-col">
+    <div class="col">
+      <h2>Chores</h2>
+      <div class="list" id="chores"></div>
+      <div class="add"><input id="chore-in" placeholder="Add a chore..."><button onclick="addChore()">+</button></div>
+    </div>
+    <div class="col">
+      <h2>Notes</h2>
+      <div class="list" id="notes"></div>
+      <div class="add"><input id="note-in" placeholder="Add a note..."><button onclick="addNote()">+</button></div>
+    </div>
   </div>
 </main>
 <div id="reply"></div>
@@ -200,17 +239,142 @@ osk.addEventListener('click', (e) => {
 
 // ---- Dashboard logic ----
 let _last = { cal: '', chores: '', notes: '' };
+let _events = [];
+let _calView = { y: 0, m: 0 };
 
-async function loadCalendar(){ const r=await fetch('/api/calendar'); const d=await r.json(); const html = d.map(e=>`<div class="item"><div class="t">${e.title||''}</div><div class="d">${[e.day,e.time].filter(Boolean).join(' · ')}</div></div>`).join('')||'<div class="item"><div class="t">No events</div></div>'; const key=JSON.stringify(d); if(key!==_last.cal){ _last.cal=key; document.getElementById('cal').innerHTML=html; } }
-async function loadChores(){ const r=await fetch('/api/chores'); const d=await r.json(); const html = d.map(c=>`<div class="item"><div class="t">${c.title||''}</div><div class="d">${c.day||''}</div></div>`).join('')||'<div class="item"><div class="t">No chores</div></div>'; const key=JSON.stringify(d); if(key!==_last.chores){ _last.chores=key; document.getElementById('chores').innerHTML=html; } }
-async function loadNotes(){ const r=await fetch('/api/notes'); const d=await r.json(); const html = d.map(n=>`<div class="item"><div class="t">${n.text||''}</div></div>`).join('')||'<div class="item"><div class="t">No notes</div></div>'; const key=JSON.stringify(d); if(key!==_last.notes){ _last.notes=key; document.getElementById('notes').innerHTML=html; } }
-function refreshAll(){ loadCalendar(); loadChores(); loadNotes(); }
-async function addChore(){ const i=document.getElementById('chore-in'); if(!i.value)return; await fetch('/api/chores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:i.value,day:''})}); i.value=''; loadChores(); }
-async function addNote(){ const i=document.getElementById('note-in'); if(!i.value)return; await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:i.value})}); i.value=''; loadNotes(); }
-async function ask(){ const i=document.getElementById('chat-in'); if(!i.value)return; const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:i.value})}); const d=await r.json(); document.getElementById('reply').textContent=d.reply; i.value=''; refreshAll(); }
-function talk(){ document.getElementById('reply').textContent='Voice assistant is listening for the wake word.'; }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function initCalView() {
+  const now = new Date();
+  _calView.y = now.getFullYear();
+  _calView.m = now.getMonth();
+}
+
+// Resolve a free-text "day" field to a Date (or null if it can't be placed).
+function resolveDay(dayStr) {
+  const s = String(dayStr || '').trim().toLowerCase();
+  if (!s) return null;
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]);
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  if (s === 'today') return now;
+  if (s === 'tomorrow') { const d = new Date(now); d.setDate(d.getDate() + 1); return d; }
+  if (s === 'yesterday') { const d = new Date(now); d.setDate(d.getDate() - 1); return d; }
+  const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  const idx = days.indexOf(s);
+  if (idx >= 0) {
+    const d = new Date(now);
+    let diff = idx - d.getDay();
+    if (diff < 0) diff += 7;   // next occurrence of that weekday
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+  return null;
+}
+
+function renderCalendar() {
+  const y = _calView.y, m = _calView.m;
+  const first = new Date(y, m, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  document.getElementById('cal-title').textContent = first.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  let cells = '';
+  for (let i = 0; i < startDow; i++) cells += '<div class="cal-cell empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(y, m, d);
+    const isToday = date.getTime() === today.getTime();
+    const evs = _events.filter(e => {
+      const rd = resolveDay(e.day);
+      return rd && rd.getTime() === date.getTime();
+    });
+    const evHtml = evs.map(e =>
+      '<div class="cal-ev">' + (e.time ? '<span class="cal-ev-time">' + esc(e.time) + '</span> ' : '') + esc(e.title) + '</div>'
+    ).join('');
+    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '"><div class="cal-num">' + d + '</div>' + evHtml + '</div>';
+  }
+  const total = startDow + daysInMonth;
+  const rem = total % 7;
+  if (rem) for (let i = 0; i < 7 - rem; i++) cells += '<div class="cal-cell empty"></div>';
+  document.getElementById('cal-grid').innerHTML = cells;
+
+  const upcoming = _events.filter(e => {
+    const rd = resolveDay(e.day);
+    if (!rd) return true;
+    return rd.getFullYear() !== y || rd.getMonth() !== m;
+  });
+  const upHtml = upcoming.map(e =>
+    '<div class="item"><div class="t">' + esc(e.title) + '</div><div class="d">' + [e.day, e.time].filter(Boolean).join(' · ') + '</div></div>'
+  ).join('');
+  document.getElementById('cal-upcoming').innerHTML = upHtml || '<div class="item"><div class="t">No upcoming events</div></div>';
+}
+
+function calShift(delta) {
+  _calView.m += delta;
+  if (_calView.m < 0) { _calView.m = 11; _calView.y--; }
+  if (_calView.m > 11) { _calView.m = 0; _calView.y++; }
+  renderCalendar();
+}
+function calToday() {
+  const now = new Date();
+  _calView.y = now.getFullYear();
+  _calView.m = now.getMonth();
+  renderCalendar();
+}
+
+async function loadCalendar() {
+  const r = await fetch('/api/calendar');
+  const d = await r.json();
+  const key = JSON.stringify(d);
+  if (key !== _last.cal) { _last.cal = key; _events = d; renderCalendar(); }
+}
+async function loadChores() {
+  const r = await fetch('/api/chores');
+  const d = await r.json();
+  const html = d.map(c => '<div class="item"><div class="t">' + esc(c.title || '') + '</div><div class="d">' + esc(c.day || '') + '</div></div>').join('') || '<div class="item"><div class="t">No chores</div></div>';
+  const key = JSON.stringify(d);
+  if (key !== _last.chores) { _last.chores = key; document.getElementById('chores').innerHTML = html; }
+}
+async function loadNotes() {
+  const r = await fetch('/api/notes');
+  const d = await r.json();
+  const html = d.map(n => '<div class="item"><div class="t">' + esc(n.text || '') + '</div></div>').join('') || '<div class="item"><div class="t">No notes</div></div>';
+  const key = JSON.stringify(d);
+  if (key !== _last.notes) { _last.notes = key; document.getElementById('notes').innerHTML = html; }
+}
+function refreshAll() { loadCalendar(); loadChores(); loadNotes(); }
+async function addChore() {
+  const i = document.getElementById('chore-in');
+  if (!i.value) return;
+  await fetch('/api/chores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: i.value, day: '' }) });
+  i.value = '';
+  loadChores();
+}
+async function addNote() {
+  const i = document.getElementById('note-in');
+  if (!i.value) return;
+  await fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: i.value }) });
+  i.value = '';
+  loadNotes();
+}
+async function ask() {
+  const i = document.getElementById('chat-in');
+  if (!i.value) return;
+  const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: i.value }) });
+  const d = await r.json();
+  document.getElementById('reply').textContent = d.reply;
+  i.value = '';
+  refreshAll();
+}
+function talk() { document.getElementById('reply').textContent = 'Voice assistant is listening for the wake word.'; }
+
+initCalView();
 refreshAll();
-// Auto-refresh: poll for changes so entries added by the agent (chat or voice) appear without a manual F5.
+// Auto-refresh: poll for changes so entries added by the agent (chat or voice)
+// appear without a manual F5. Diff-aware loaders prevent flicker on no-change polls.
 setInterval(refreshAll, 3000);
 </script>
 </body>

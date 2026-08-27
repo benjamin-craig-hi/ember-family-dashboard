@@ -12,7 +12,8 @@ be offloaded to a GPU workstation on the LAN via `OLLAMA_HOST`.
 
 - **Voice assistant** — "Hey Jarvis" wake word, then speak a command. It can
   add notes, chores, and calendar events by voice.
-- **Family board** — three columns (calendar, chores, notes) with a chat box.
+- **Family board** — a month-view calendar as the main pane, with chores and
+  notes stacked in a narrower right-hand column, plus a chat box.
 - **On-screen keyboard** — a built-in touch keyboard, because GNOME's OSK is
   unreliable with snap Chromium in kiosk mode.
 - **Fully local** — wake word, speech-to-text, and text-to-speech all run on
