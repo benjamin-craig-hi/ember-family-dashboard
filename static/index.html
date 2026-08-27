@@ -199,14 +199,19 @@ osk.addEventListener('click', (e) => {
 });
 
 // ---- Dashboard logic ----
-async function loadCalendar(){ const r=await fetch('/api/calendar'); const d=await r.json(); document.getElementById('cal').innerHTML = d.map(e=>`<div class="item"><div class="t">${e.title||''}</div><div class="d">${[e.day,e.time].filter(Boolean).join(' · ')}</div></div>`).join('')||'<div class="item"><div class="t">No events</div></div>'; }
-async function loadChores(){ const r=await fetch('/api/chores'); const d=await r.json(); document.getElementById('chores').innerHTML = d.map(c=>`<div class="item"><div class="t">${c.title||''}</div><div class="d">${c.day||''}</div></div>`).join('')||'<div class="item"><div class="t">No chores</div></div>'; }
-async function loadNotes(){ const r=await fetch('/api/notes'); const d=await r.json(); document.getElementById('notes').innerHTML = d.map(n=>`<div class="item"><div class="t">${n.text||''}</div></div>`).join('')||'<div class="item"><div class="t">No notes</div></div>'; }
+let _last = { cal: '', chores: '', notes: '' };
+
+async function loadCalendar(){ const r=await fetch('/api/calendar'); const d=await r.json(); const html = d.map(e=>`<div class="item"><div class="t">${e.title||''}</div><div class="d">${[e.day,e.time].filter(Boolean).join(' · ')}</div></div>`).join('')||'<div class="item"><div class="t">No events</div></div>'; const key=JSON.stringify(d); if(key!==_last.cal){ _last.cal=key; document.getElementById('cal').innerHTML=html; } }
+async function loadChores(){ const r=await fetch('/api/chores'); const d=await r.json(); const html = d.map(c=>`<div class="item"><div class="t">${c.title||''}</div><div class="d">${c.day||''}</div></div>`).join('')||'<div class="item"><div class="t">No chores</div></div>'; const key=JSON.stringify(d); if(key!==_last.chores){ _last.chores=key; document.getElementById('chores').innerHTML=html; } }
+async function loadNotes(){ const r=await fetch('/api/notes'); const d=await r.json(); const html = d.map(n=>`<div class="item"><div class="t">${n.text||''}</div></div>`).join('')||'<div class="item"><div class="t">No notes</div></div>'; const key=JSON.stringify(d); if(key!==_last.notes){ _last.notes=key; document.getElementById('notes').innerHTML=html; } }
+function refreshAll(){ loadCalendar(); loadChores(); loadNotes(); }
 async function addChore(){ const i=document.getElementById('chore-in'); if(!i.value)return; await fetch('/api/chores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:i.value,day:''})}); i.value=''; loadChores(); }
 async function addNote(){ const i=document.getElementById('note-in'); if(!i.value)return; await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:i.value})}); i.value=''; loadNotes(); }
-async function ask(){ const i=document.getElementById('chat-in'); if(!i.value)return; const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:i.value})}); const d=await r.json(); document.getElementById('reply').textContent=d.reply; i.value=''; }
+async function ask(){ const i=document.getElementById('chat-in'); if(!i.value)return; const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:i.value})}); const d=await r.json(); document.getElementById('reply').textContent=d.reply; i.value=''; refreshAll(); }
 function talk(){ document.getElementById('reply').textContent='Voice assistant is listening for the wake word.'; }
-loadCalendar(); loadChores(); loadNotes();
+refreshAll();
+// Auto-refresh: poll for changes so entries added by the agent (chat or voice) appear without a manual F5.
+setInterval(refreshAll, 3000);
 </script>
 </body>
 </html>
