@@ -91,6 +91,11 @@ def load_config():
 # ---------------------------------------------------------------------------
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
+DEFAULT_FAMILY = [
+    {"name": "Mom", "color": "#ff7a1a", "stars": 0},
+    {"name": "Dad", "color": "#4a9eff", "stars": 0},
+]
+
 # Tool definitions for the LLM (qwen3:8b-q8_0 supports tool calling)
 TOOLS = [
     {
@@ -117,6 +122,22 @@ TOOLS = [
                 "properties": {
                     "title": {"type": "string", "description": "The chore title"},
                     "day": {"type": "string", "description": "Optional day of the week"},
+                    "stars": {"type": "integer", "description": "Optional star value for completing this chore"},
+                    "assignee": {"type": "string", "description": "Optional family member the chore is assigned to"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_chore",
+            "description": "Mark a chore as done and award its stars",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "The chore title to complete"}
                 },
                 "required": ["title"],
             },
@@ -164,9 +185,27 @@ def add_note(text):
     _save_json("notes.json", notes)
 
 
-def add_chore(title, day=""):
+def add_chore(title, day="", stars=0, assignee=""):
     chores = _load_json("chores.json", [])
-    chores.append({"title": title, "day": day, "done": False})
+    chores.append({"title": title, "day": day, "done": False, "stars": int(stars or 0), "assignee": assignee})
+    _save_json("chores.json", chores)
+
+
+def complete_chore(title):
+    chores = _load_json("chores.json", [])
+    for c in chores:
+        if c.get("title", "").strip().lower() == title.strip().lower() and not c.get("done"):
+            c["done"] = True
+            stars = int(c.get("stars", 0) or 0)
+            assignee = c.get("assignee", "")
+            if stars and assignee:
+                family = _load_json("family.json", DEFAULT_FAMILY)
+                for m in family:
+                    if m["name"] == assignee:
+                        m["stars"] = int(m.get("stars", 0)) + stars
+                        break
+                _save_json("family.json", family)
+            break
     _save_json("chores.json", chores)
 
 
@@ -180,7 +219,9 @@ def run_tool(name, args):
     if name == "add_note":
         add_note(args.get("text", ""))
     elif name == "add_chore":
-        add_chore(args.get("title", ""), args.get("day", ""))
+        add_chore(args.get("title", ""), args.get("day", ""), args.get("stars", 0), args.get("assignee", ""))
+    elif name == "complete_chore":
+        complete_chore(args.get("title", ""))
     elif name == "add_calendar_event":
         add_calendar_event(args.get("title", ""), args.get("day", ""), args.get("time", ""))
     else:
@@ -191,6 +232,7 @@ def confirmation_for(names):
     phrases = {
         "add_note": "I added that to your notes.",
         "add_chore": "I added that to your chores.",
+        "complete_chore": "Nice, I marked that chore done.",
         "add_calendar_event": "I added that to your calendar.",
     }
     parts = [phrases[n] for n in names if n in phrases]

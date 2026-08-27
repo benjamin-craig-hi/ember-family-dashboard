@@ -49,6 +49,33 @@ def _save(name, data):
         json.dump(data, f, indent=2)
 
 
+DEFAULT_FAMILY = [
+    {"name": "Mom", "color": "#ff7a1a", "stars": 0},
+    {"name": "Dad", "color": "#4a9eff", "stars": 0},
+]
+DEFAULT_REWARDS = [
+    {"title": "Extra screen time", "cost": 10, "claimed": False},
+    {"title": "Pick the movie", "cost": 5, "claimed": False},
+]
+DEFAULT_MILESTONES = [
+    {"threshold": 10, "label": "10 stars!", "emoji": "⭐"},
+    {"threshold": 25, "label": "25 stars!", "emoji": "🌟"},
+    {"threshold": 50, "label": "50 stars!", "emoji": "🏆"},
+]
+
+
+def _load_family():
+    return _load("family.json", DEFAULT_FAMILY)
+
+
+def _load_rewards():
+    return _load("rewards.json", DEFAULT_REWARDS)
+
+
+def _load_milestones():
+    return _load("milestones.json", DEFAULT_MILESTONES)
+
+
 class ChatRequest(BaseModel):
     content: str
 
@@ -78,6 +105,22 @@ TOOLS = [
                 "properties": {
                     "title": {"type": "string", "description": "The chore title"},
                     "day": {"type": "string", "description": "Optional day of the week"},
+                    "stars": {"type": "integer", "description": "Optional star value for completing this chore"},
+                    "assignee": {"type": "string", "description": "Optional family member the chore is assigned to"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_chore",
+            "description": "Mark a chore as done and award its stars",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "The chore title to complete"}
                 },
                 "required": ["title"],
             },
@@ -109,7 +152,30 @@ def _run_tool(name, args):
         _save("notes.json", notes)
     elif name == "add_chore":
         chores = _load("chores.json", [])
-        chores.append({"title": args.get("title", ""), "day": args.get("day", ""), "done": False})
+        chores.append({
+            "title": args.get("title", ""),
+            "day": args.get("day", ""),
+            "done": False,
+            "stars": int(args.get("stars", 0) or 0),
+            "assignee": args.get("assignee", ""),
+        })
+        _save("chores.json", chores)
+    elif name == "complete_chore":
+        chores = _load("chores.json", [])
+        title = args.get("title", "")
+        for c in chores:
+            if c.get("title", "").strip().lower() == title.strip().lower() and not c.get("done"):
+                c["done"] = True
+                stars = int(c.get("stars", 0) or 0)
+                assignee = c.get("assignee", "")
+                if stars and assignee:
+                    family = _load_family()
+                    for m in family:
+                        if m["name"] == assignee:
+                            m["stars"] = int(m.get("stars", 0)) + stars
+                            break
+                    _save("family.json", family)
+                break
         _save("chores.json", chores)
     elif name == "add_calendar_event":
         events = _load("calendar.json", [])
@@ -164,11 +230,24 @@ async def add_chore(request: Request):
 async def set_chore_done(index: int, request: Request):
     body = await request.json()
     chores = _load("chores.json", [])
-    if 0 <= index < len(chores):
-        chores[index]["done"] = bool(body.get("done", False))
-        _save("chores.json", chores)
-        return {"ok": True}
-    return {"ok": False, "error": "index out of range"}
+    if not (0 <= index < len(chores)):
+        return {"ok": False, "error": "index out of range"}
+    chore = chores[index]
+    new_done = bool(body.get("done", False))
+    # Award stars only on the transition from not-done -> done
+    if new_done and not chore.get("done"):
+        stars = int(chore.get("stars", 0) or 0)
+        assignee = chore.get("assignee", "")
+        if stars and assignee:
+            family = _load_family()
+            for m in family:
+                if m["name"] == assignee:
+                    m["stars"] = int(m.get("stars", 0)) + stars
+                    break
+            _save("family.json", family)
+    chore["done"] = new_done
+    _save("chores.json", chores)
+    return {"ok": True}
 
 
 @app.get("/api/notes")
@@ -197,6 +276,52 @@ async def add_calendar_event(request: Request):
     events.append(body)
     _save("calendar.json", events)
     return {"ok": True}
+
+
+@app.get("/api/family")
+def get_family():
+    return _load_family()
+
+
+@app.get("/api/rewards")
+def get_rewards():
+    return _load_rewards()
+
+
+@app.post("/api/rewards")
+async def add_reward(request: Request):
+    body = await request.json()
+    rewards = _load_rewards()
+    rewards.append({"title": body.get("title", ""), "cost": int(body.get("cost", 0)), "claimed": False})
+    _save("rewards.json", rewards)
+    return {"ok": True}
+
+
+@app.post("/api/rewards/{index}/claim")
+async def claim_reward(index: int, request: Request):
+    body = await request.json()
+    assignee = body.get("assignee", "")
+    rewards = _load_rewards()
+    family = _load_family()
+    if not (0 <= index < len(rewards)):
+        return {"ok": False, "error": "index out of range"}
+    reward = rewards[index]
+    cost = int(reward.get("cost", 0))
+    member = next((m for m in family if m["name"] == assignee), None)
+    if member is None:
+        return {"ok": False, "error": "unknown member"}
+    if int(member.get("stars", 0)) < cost:
+        return {"ok": False, "error": "not enough stars"}
+    member["stars"] = int(member.get("stars", 0)) - cost
+    reward["claimed"] = True
+    _save("family.json", family)
+    _save("rewards.json", rewards)
+    return {"ok": True}
+
+
+@app.get("/api/milestones")
+def get_milestones():
+    return _load_milestones()
 
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"), html=True), name="static")
