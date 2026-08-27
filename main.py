@@ -109,7 +109,7 @@ def _run_tool(name, args):
         _save("notes.json", notes)
     elif name == "add_chore":
         chores = _load("chores.json", [])
-        chores.append({"title": args.get("title", ""), "day": args.get("day", "")})
+        chores.append({"title": args.get("title", ""), "day": args.get("day", ""), "done": False})
         _save("chores.json", chores)
     elif name == "add_calendar_event":
         events = _load("calendar.json", [])
@@ -154,9 +154,21 @@ def get_chores():
 async def add_chore(request: Request):
     body = await request.json()
     chores = _load("chores.json", [])
+    body.setdefault("done", False)
     chores.append(body)
     _save("chores.json", chores)
     return {"ok": True}
+
+
+@app.post("/api/chores/{index}/done")
+async def set_chore_done(index: int, request: Request):
+    body = await request.json()
+    chores = _load("chores.json", [])
+    if 0 <= index < len(chores):
+        chores[index]["done"] = bool(body.get("done", False))
+        _save("chores.json", chores)
+        return {"ok": True}
+    return {"ok": False, "error": "index out of range"}
 
 
 @app.get("/api/notes")

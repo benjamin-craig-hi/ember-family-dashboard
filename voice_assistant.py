@@ -166,7 +166,7 @@ def add_note(text):
 
 def add_chore(title, day=""):
     chores = _load_json("chores.json", [])
-    chores.append({"title": title, "day": day})
+    chores.append({"title": title, "day": day, "done": False})
     _save_json("chores.json", chores)
 
 
