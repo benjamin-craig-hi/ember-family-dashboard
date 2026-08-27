@@ -29,6 +29,20 @@
   .chore-item.done .t { text-decoration:line-through; color:var(--muted); }
   .chip { font-size:.7rem; padding:2px 8px; border-radius:10px; color:#111; font-weight:700; flex:none; }
   .stars { font-size:.8rem; color:var(--accent); flex:none; }
+  .claim-btn { background:var(--accent); color:#111; border:none; border-radius:6px; padding:4px 10px; font-weight:700; cursor:pointer; font-size:.8rem; }
+
+  /* ---- Member picker modal ---- */
+  #picker { position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; }
+  #picker.show { display:flex; }
+  .picker-box { background:var(--panel); border:1px solid #333a46; border-radius:12px; padding:20px; min-width:280px; max-width:90vw; }
+  .picker-box h3 { color:var(--accent); margin-bottom:12px; font-size:1.1rem; }
+  .picker-members { display:flex; flex-direction:column; gap:8px; }
+  .picker-member { display:flex; align-items:center; gap:10px; background:#22262f; border:1px solid #333a46; border-radius:8px; padding:12px; cursor:pointer; }
+  .picker-member:active { background:#2a2f3a; }
+  .picker-member .dot { width:14px; height:14px; border-radius:50%; flex:none; }
+  .picker-member .nm { font-weight:600; flex:1; }
+  .picker-member .bal { color:var(--muted); font-size:.85rem; }
+  .picker-cancel { margin-top:12px; width:100%; background:#2a2f3a; color:var(--text); border:1px solid #333a46; border-radius:8px; padding:10px; cursor:pointer; font-weight:600; }
   .add { display:flex; gap:8px; margin-top:10px; }
   .add input { flex:1; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:10px; font-size:1rem; }
   .add button { background:var(--accent); color:#111; border:none; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; }
@@ -121,6 +135,15 @@
   <div id="chatbox"><input id="chat-in" placeholder="Ask the assistant..."><button onclick="ask()">Send</button></div>
   <button id="talk" onclick="talk()">🎤 Talk</button>
 </footer>
+
+<!-- Member picker modal -->
+<div id="picker">
+  <div class="picker-box">
+    <h3>Who is claiming this?</h3>
+    <div class="picker-members" id="picker-members"></div>
+    <button class="picker-cancel" onclick="closePicker()">Cancel</button>
+  </div>
+</div>
 
 <!-- On-screen keyboard -->
 <div id="osk">
@@ -382,19 +405,38 @@ async function loadRewards() {
   ).join('');
   const store = rew.map((r, i) =>
     '<div class="item"><div class="t">' + esc(r.title) + ' (' + r.cost + ' ⭐)</div>' +
-    (r.claimed ? '<div class="d">claimed</div>' : '<button onclick="claimReward(' + i + ')">Claim</button>') +
+    (r.claimed ? '<div class="d">claimed</div>' : '<button class="claim-btn" onclick="openPicker(' + i + ')">Claim</button>') +
     '</div>'
   ).join('');
   document.getElementById('rewards').innerHTML =
     '<div class="d">Balances</div>' + balances +
     '<div class="d" style="margin-top:8px">Reward store</div>' + store;
 }
-async function claimReward(i) {
-  const assignee = prompt('Who is claiming this reward?');
-  if (!assignee) return;
-  const r = await fetch('/api/rewards/' + i + '/claim', {
+let _claimIndex = null;
+function openPicker(i) {
+  _claimIndex = i;
+  const box = document.getElementById('picker-members');
+  box.innerHTML = _family.map((m, mi) =>
+    '<div class="picker-member" onclick="doClaim(' + mi + ')">' +
+    '<span class="dot" style="background:' + m.color + '"></span>' +
+    '<span class="nm">' + esc(m.name) + '</span>' +
+    '<span class="bal">' + m.stars + ' ⭐</span>' +
+    '</div>'
+  ).join('');
+  document.getElementById('picker').classList.add('show');
+}
+function closePicker() {
+  document.getElementById('picker').classList.remove('show');
+  _claimIndex = null;
+}
+async function doClaim(memberIndex) {
+  const idx = _claimIndex;
+  const name = _family[memberIndex] ? _family[memberIndex].name : '';
+  closePicker();
+  if (!name) return;
+  const r = await fetch('/api/rewards/' + idx + '/claim', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ assignee: assignee }),
+    body: JSON.stringify({ assignee: name }),
   });
   const d = await r.json();
   if (!d.ok) alert(d.error || 'Could not claim');
