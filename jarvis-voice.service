@@ -1,0 +1,14 @@
+[Unit]
+Description=Jarvis voice assistant (wake word -> STT -> LLM -> TTS)
+After=default.target
+
+[Service]
+WorkingDirectory=/home/dashboard/dashboard-app
+ExecStart=/home/dashboard/dashboard-app/venv/bin/python /home/dashboard/dashboard-app/voice_assistant.py
+Restart=always
+RestartSec=5
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=HOME=/home/dashboard
+
+[Install]
+WantedBy=default.target

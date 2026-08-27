@@ -1,0 +1,15 @@
+# Runtime data (notes/chores/calendar) — never commit family data
+data/
+voice_config.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Wake-word training clips
+wakeword-training/
+
+# Env / secrets
+.env

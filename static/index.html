@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Family Dashboard</title>
+<style>
+  :root { --bg:#0f1115; --panel:#1a1d24; --accent:#ff7a1a; --text:#e8e8e8; --muted:#8a8f98; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; }
+  body { background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  header { padding:18px 24px; font-size:1.6rem; font-weight:700; border-bottom:1px solid #262a33; }
+  header span { color:var(--accent); }
+  main { flex:1; display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; padding:16px; overflow:hidden; }
+  .col { background:var(--panel); border-radius:12px; padding:16px; display:flex; flex-direction:column; overflow:hidden; }
+  .col h2 { font-size:1.1rem; margin-bottom:12px; color:var(--accent); }
+  .list { flex:1; overflow-y:auto; }
+  .item { background:#22262f; border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+  .item .t { font-weight:600; }
+  .item .d { color:var(--muted); font-size:.85rem; margin-top:2px; }
+  .add { display:flex; gap:8px; margin-top:10px; }
+  .add input { flex:1; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:10px; font-size:1rem; }
+  .add button { background:var(--accent); color:#111; border:none; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; }
+  footer { display:flex; gap:12px; padding:12px 16px; border-top:1px solid #262a33; }
+  #chatbox { flex:1; display:flex; gap:8px; }
+  #chatbox input { flex:1; background:#1a1d24; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:12px; font-size:1rem; }
+  #chatbox button { background:var(--accent); color:#111; border:none; border-radius:8px; padding:12px 20px; font-weight:700; cursor:pointer; }
+  #talk { background:#2a6f4a; color:#fff; border:none; border-radius:8px; padding:12px 20px; font-weight:700; cursor:pointer; }
+  #reply { padding:12px 16px; color:var(--muted); font-size:.95rem; min-height:20px; }
+
+  /* ---- On-screen keyboard (25% larger) ---- */
+  #osk {
+    position:fixed; left:0; right:0; bottom:0; z-index:1000;
+    background:#14171d; border-top:2px solid #333a46; padding:12px 10px 16px;
+    display:none; flex-direction:column; gap:8px;
+  }
+  #osk.show { display:flex; }
+  .osk-row { display:flex; gap:8px; justify-content:center; }
+  .osk-key {
+    flex:1; max-width:90px; height:65px; background:#22262f; border:1px solid #333a46;
+    color:var(--text); border-radius:8px; font-size:1.45rem; font-weight:600;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    user-select:none; -webkit-user-select:none; touch-action:manipulation;
+  }
+  .osk-key:active { background:var(--accent); color:#111; }
+  .osk-key.wide { max-width:138px; }
+  .osk-key.space { max-width:425px; }
+  .osk-key.fn { background:#2a2f3a; color:var(--accent); }
+  .osk-key.done { background:var(--accent); color:#111; }
+</style>
+</head>
+<body>
+<header>Family <span>Dashboard</span></header>
+<main>
+  <div class="col">
+    <h2>Calendar</h2>
+    <div class="list" id="cal"></div>
+  </div>
+  <div class="col">
+    <h2>Chores</h2>
+    <div class="list" id="chores"></div>
+    <div class="add"><input id="chore-in" placeholder="Add a chore..."><button onclick="addChore()">+</button></div>
+  </div>
+  <div class="col">
+    <h2>Notes</h2>
+    <div class="list" id="notes"></div>
+    <div class="add"><input id="note-in" placeholder="Add a note..."><button onclick="addNote()">+</button></div>
+  </div>
+</main>
+<div id="reply"></div>
+<footer>
+  <div id="chatbox"><input id="chat-in" placeholder="Ask the assistant..."><button onclick="ask()">Send</button></div>
+  <button id="talk" onclick="talk()">🎤 Talk</button>
+</footer>
+
+<!-- On-screen keyboard -->
+<div id="osk">
+  <div class="osk-row">
+    <span class="osk-key" data-k="1">1</span><span class="osk-key" data-k="2">2</span>
+    <span class="osk-key" data-k="3">3</span><span class="osk-key" data-k="4">4</span>
+    <span class="osk-key" data-k="5">5</span><span class="osk-key" data-k="6">6</span>
+    <span class="osk-key" data-k="7">7</span><span class="osk-key" data-k="8">8</span>
+    <span class="osk-key" data-k="9">9</span><span class="osk-key" data-k="0">0</span>
+    <span class="osk-key fn" data-k="backspace">⌫</span>
+  </div>
+  <div class="osk-row">
+    <span class="osk-key" data-k="q">q</span><span class="osk-key" data-k="w">w</span>
+    <span class="osk-key" data-k="e">e</span><span class="osk-key" data-k="r">r</span>
+    <span class="osk-key" data-k="t">t</span><span class="osk-key" data-k="y">y</span>
+    <span class="osk-key" data-k="u">u</span><span class="osk-key" data-k="i">i</span>
+    <span class="osk-key" data-k="o">o</span><span class="osk-key" data-k="p">p</span>
+  </div>
+  <div class="osk-row">
+    <span class="osk-key wide fn" data-k="shift">⇧</span>
+    <span class="osk-key" data-k="a">a</span><span class="osk-key" data-k="s">s</span>
+    <span class="osk-key" data-k="d">d</span><span class="osk-key" data-k="f">f</span>
+    <span class="osk-key" data-k="g">g</span><span class="osk-key" data-k="h">h</span>
+    <span class="osk-key" data-k="j">j</span><span class="osk-key" data-k="k">k</span>
+    <span class="osk-key" data-k="l">l</span>
+    <span class="osk-key wide fn" data-k="enter">⏎</span>
+  </div>
+  <div class="osk-row">
+    <span class="osk-key wide fn" data-k="123">123</span>
+    <span class="osk-key" data-k="z">z</span><span class="osk-key" data-k="x">x</span>
+    <span class="osk-key" data-k="c">c</span><span class="osk-key" data-k="v">v</span>
+    <span class="osk-key" data-k="b">b</span><span class="osk-key" data-k="n">n</span>
+    <span class="osk-key" data-k="m">m</span>
+    <span class="osk-key" data-k=",">,</span><span class="osk-key" data-k=".">.</span>
+    <span class="osk-key wide fn" data-k="space">␣</span>
+  </div>
+  <div class="osk-row">
+    <span class="osk-key space fn" data-k="space">space</span>
+    <span class="osk-key done" data-k="done">Done</span>
+  </div>
+</div>
+
+<script>
+// ---- On-screen keyboard ----
+const osk = document.getElementById('osk');
+let activeInput = null;
+let shift = false;
+
+function showOsk(input) {
+  activeInput = input;
+  osk.classList.add('show');
+}
+function hideOsk() {
+  osk.classList.remove('show');
+  activeInput = null;
+}
+
+// Show keyboard when any text input/textarea is focused
+document.addEventListener('focusin', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {
+    showOsk(t);
+  }
+});
+// Hide when focus leaves a text field (but not when moving between keys)
+document.addEventListener('focusout', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {
+    // small delay so tapping a key doesn't hide the keyboard first
+    setTimeout(() => {
+      if (document.activeElement === document.body || !(document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA'))) {
+        hideOsk();
+      }
+    }, 150);
+  }
+});
+
+// Key handling
+osk.addEventListener('click', (e) => {
+  const key = e.target.closest('.osk-key');
+  if (!key || !activeInput) return;
+  const k = key.dataset.k;
+  const el = activeInput;
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+
+  if (k === 'backspace') {
+    if (start === end && start > 0) {
+      el.value = el.value.slice(0, start - 1) + el.value.slice(end);
+      el.setSelectionRange(start - 1, start - 1);
+    } else if (start !== end) {
+      el.value = el.value.slice(0, start) + el.value.slice(end);
+      el.setSelectionRange(start, start);
+    }
+  } else if (k === 'enter') {
+    hideOsk();
+    // trigger the associated action if it's the chat box
+    if (el.id === 'chat-in') ask();
+    else if (el.id === 'chore-in') addChore();
+    else if (el.id === 'note-in') addNote();
+  } else if (k === 'shift') {
+    shift = !shift;
+    document.querySelectorAll('.osk-key[data-k]').forEach(kk => {
+      const c = kk.dataset.k;
+      if (c && c.length === 1 && /[a-z]/.test(c)) {
+        kk.textContent = shift ? c.toUpperCase() : c;
+      }
+    });
+  } else if (k === '123') {
+    // toggle not implemented; keep simple
+  } else if (k === 'space') {
+    el.value = el.value.slice(0, start) + ' ' + el.value.slice(end);
+    el.setSelectionRange(start + 1, start + 1);
+  } else if (k === 'done') {
+    // Dismiss the keyboard and drop focus so it stays hidden.
+    hideOsk();
+    el.blur();
+    return;
+  } else {
+    const ch = shift && /[a-z]/.test(k) ? k.toUpperCase() : k;
+    el.value = el.value.slice(0, start) + ch + el.value.slice(end);
+    el.setSelectionRange(start + 1, start + 1);
+  }
+  el.focus();
+});
+
+// ---- Dashboard logic ----
+async function loadCalendar(){ const r=await fetch('/api/calendar'); const d=await r.json(); document.getElementById('cal').innerHTML = d.map(e=>`<div class="item"><div class="t">${e.title||''}</div><div class="d">${[e.day,e.time].filter(Boolean).join(' · ')}</div></div>`).join('')||'<div class="item"><div class="t">No events</div></div>'; }
+async function loadChores(){ const r=await fetch('/api/chores'); const d=await r.json(); document.getElementById('chores').innerHTML = d.map(c=>`<div class="item"><div class="t">${c.title||''}</div><div class="d">${c.day||''}</div></div>`).join('')||'<div class="item"><div class="t">No chores</div></div>'; }
+async function loadNotes(){ const r=await fetch('/api/notes'); const d=await r.json(); document.getElementById('notes').innerHTML = d.map(n=>`<div class="item"><div class="t">${n.text||''}</div></div>`).join('')||'<div class="item"><div class="t">No notes</div></div>'; }
+async function addChore(){ const i=document.getElementById('chore-in'); if(!i.value)return; await fetch('/api/chores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:i.value,day:''})}); i.value=''; loadChores(); }
+async function addNote(){ const i=document.getElementById('note-in'); if(!i.value)return; await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:i.value})}); i.value=''; loadNotes(); }
+async function ask(){ const i=document.getElementById('chat-in'); if(!i.value)return; const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:i.value})}); const d=await r.json(); document.getElementById('reply').textContent=d.reply; i.value=''; }
+function talk(){ document.getElementById('reply').textContent='Voice assistant is listening for the wake word.'; }
+loadCalendar(); loadChores(); loadNotes();
+</script>
+</body>
+</html>
