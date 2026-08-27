@@ -1,14 +1,36 @@
 import json
 import os
+from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from ollama import Client
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_dotenv(path):
+    """Load KEY=VALUE pairs from a .env file into os.environ (never overrides)."""
+    if not os.path.exists(path):
+        return
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+
+
+_load_dotenv(os.path.join(BASE_DIR, ".env"))
+
 MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b-q8_0")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 _client = Client(host=OLLAMA_HOST)
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 app = FastAPI(title="Family Dashboard")
@@ -97,10 +119,11 @@ def _run_tool(name, args):
 
 @app.post("/api/chat")
 def api_chat(req: ChatRequest):
+    today = datetime.now().strftime("%A, %B %d, %Y")
     resp = _client.chat(
         model=MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful family dashboard assistant. Answer in one short sentence. No emoji. When the user asks you to add a note, chore, or calendar event, use the appropriate tool to actually save it."},
+            {"role": "system", "content": f"Today is {today}. You are a helpful family dashboard assistant. Answer in one short sentence. No emoji. When the user asks you to add a note, chore, or calendar event, use the appropriate tool to actually save it. For calendar events, resolve relative dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."},
             {"role": "user", "content": req.content},
         ],
         tools=TOOLS,

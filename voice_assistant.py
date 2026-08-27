@@ -22,17 +22,39 @@ import json
 import os
 import sys
 import time
+from datetime import datetime
 
 import numpy as np
 import sounddevice as sd
 
 SAMPLE_RATE = 16000
 CHUNK = 1280  # 80ms @ 16kHz (openWakeWord default frame)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_dotenv(path):
+    """Load KEY=VALUE pairs from a .env file into os.environ (never overrides)."""
+    if not os.path.exists(path):
+        return
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+
+
+_load_dotenv(os.path.join(BASE_DIR, ".env"))
+
 MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b-q8_0")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 ASSISTANT_NAME = "Jarvis"
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "voice_config.json")
 
 # ---------------------------------------------------------------------------
@@ -323,12 +345,14 @@ def _get_client():
 
 
 def ask_llm(text):
+    today = datetime.now().strftime("%A, %B %d, %Y")
     resp = _get_client().chat(model=MODEL, messages=[
         {"role": "system", "content": (
-            f"You are {ASSISTANT_NAME}, a warm, helpful family dashboard assistant. "
+            f"Today is {today}. You are {ASSISTANT_NAME}, a warm, helpful family dashboard assistant. "
             "Answer in one short sentence, in plain spoken language. No emoji, no lists. "
             "When the user asks you to add a note, chore, or calendar event, use the "
-            "appropriate tool to actually save it."
+            "appropriate tool to actually save it. For calendar events, resolve relative "
+            f"dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."
         )},
         {"role": "user", "content": text},
     ], tools=TOOLS, options={"num_ctx": 4096})

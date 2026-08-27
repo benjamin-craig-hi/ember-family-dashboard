@@ -71,9 +71,17 @@ cp .env.example .env
 # edit .env to point OLLAMA_HOST at your Ollama instance
 ```
 
+Both `main.py` and `voice_assistant.py` auto-load `.env` from their own
+directory (a tiny stdlib loader — no extra dependency). Values in `.env` are
+read into the environment but **never override** a variable that's already set,
+so a systemd `Environment=` line or a real shell export still wins.
+
 The dashboard defaults to `http://localhost:11434`. To offload the model to a
 GPU box on the LAN, set `OLLAMA_HOST` to that machine's address and make sure
 its Ollama binds to the network (`OLLAMA_HOST=0.0.0.0:11434`).
+
+`.env` is git-ignored, so each machine keeps its own copy and repo updates
+never clobber it.
 
 ### 4. Run
 

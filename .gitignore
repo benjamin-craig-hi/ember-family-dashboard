@@ -1,5 +1,8 @@
 # Runtime data (notes/chores/calendar) — never commit family data
 data/
+calendar.json
+notes.json
+chores.json
 voice_config.json
 
 # Python
@@ -11,5 +14,5 @@ venv/
 # Wake-word training clips
 wakeword-training/
 
-# Env / secrets
+# Env / secrets — never commit real credentials
 .env
