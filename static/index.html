@@ -18,6 +18,9 @@
   .cal-pane { background:var(--panel); border-radius:12px; padding:16px; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
   .right-col { display:flex; flex-direction:column; gap:16px; overflow:hidden; min-height:0; }
   .col { background:var(--panel); border-radius:12px; padding:16px; display:flex; flex-direction:column; overflow:hidden; min-height:0; flex:1; }
+  .col.col-rewards { flex:1.2; }
+  .col.col-chores { flex:1; }
+  .col.col-notes { flex:0.8; }
   .col h2 { font-size:1.1rem; margin-bottom:12px; color:var(--accent); }
   .list { flex:1; overflow-y:auto; }
   .item { background:#22262f; border-radius:8px; padding:10px 12px; margin-bottom:8px; }
@@ -114,19 +117,19 @@
     </div>
   </div>
   <div class="right-col">
-    <div class="col">
+    <div class="col col-rewards">
+      <h2>Rewards</h2>
+      <div class="list" id="rewards"></div>
+    </div>
+    <div class="col col-chores">
       <h2>Chores</h2>
       <div class="list" id="chores"></div>
       <div class="add"><input id="chore-in" placeholder="Add a chore..."><button onclick="addChore()">+</button></div>
     </div>
-    <div class="col">
+    <div class="col col-notes">
       <h2>Notes</h2>
       <div class="list" id="notes"></div>
       <div class="add"><input id="note-in" placeholder="Add a note..."><button onclick="addNote()">+</button></div>
-    </div>
-    <div class="col">
-      <h2>Rewards</h2>
-      <div class="list" id="rewards"></div>
     </div>
   </div>
 </main>
