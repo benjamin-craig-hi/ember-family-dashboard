@@ -202,9 +202,14 @@ In progress / TODO:
   weather, clock, notification feed, settings, on-screen keyboard)
 - `static/grocery.html` — mobile grocery list page
 - `static/meals.html` — meal planning page
+- `requirements.txt` — pinned Python dependencies
+- `.env.example` — environment template (`OLLAMA_HOST`, `OLLAMA_MODEL`)
 - `jarvis-voice.service` — systemd **user** service for the voice loop
 - `record_wakeword.py` — records clips to train a custom wake word (optional)
+- `scripts/reload-kiosk.sh` — restarts the kiosk browser (used by the git hook)
+- `hooks/post-merge` — git hook that auto-reloads the kiosk browser on `git pull`
 - `docs/plans/` — roadmap and phase plans
+- `docs/screenshots/` — dashboard and settings screenshots
 
 ## Setup
 
@@ -218,18 +223,28 @@ sudo apt-get install -y libportaudio2 alsa-utils pulseaudio-utils
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-pip install fastapi uvicorn ollama
-pip install onnxruntime numpy soundfile scipy sounddevice
-pip install kokoro openwakeword silero-vad
-pip install useful-moonshine-onnx   # NOT "moonshine" and NOT "useful-moonshine"
+pip install -r requirements.txt
 
 # CPU-only torch stack (the naive install pulls broken CUDA builds)
 pip install --force-reinstall \
     torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 \
     --index-url https://download.pytorch.org/whl/cpu
-
-pip install "transformers==4.46.3" "huggingface-hub>=1.5.0,<2.0" "tokenizers>=0.22.0,<=0.23.0"
 ```
+
+`requirements.txt` pins the full stack:
+
+| Package | Purpose |
+|---------|---------|
+| `fastapi` / `uvicorn` | dashboard web server |
+| `ollama` | LLM client (chat + tool calling) |
+| `onnxruntime` | STT (Moonshine) + wake-word inference |
+| `numpy` / `soundfile` / `scipy` / `sounddevice` | audio capture + processing |
+| `kokoro` | text-to-speech |
+| `openwakeword` | wake-word detection |
+| `silero-vad` | voice-activity detection |
+| `useful-moonshine-onnx` | speech-to-text (NOT `moonshine` or `useful-moonshine`) |
+| `torch` / `torchvision` / `torchaudio` | model runtime (CPU build) |
+| `transformers` / `huggingface-hub` / `tokenizers` | Kokoro's model loading |
 
 > The weather, notification feed, photo upload, and iCal parser use only the
 > Python standard library (`urllib`, `re`, `json`) — no extra dependencies.
@@ -240,6 +255,13 @@ pip install "transformers==4.46.3" "huggingface-hub>=1.5.0,<2.0" "tokenizers>=0.
 cp .env.example .env
 # edit .env to point OLLAMA_HOST at your Ollama instance
 ```
+
+`.env` variables:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OLLAMA_HOST` | `http://localhost:11434` | where the LLM lives (point at a GPU box on the LAN to offload) |
+| `OLLAMA_MODEL` | `qwen3:8b-q8_0` | the Ollama model to use |
 
 Both `main.py` and `voice_assistant.py` auto-load `.env` from their own
 directory (a tiny stdlib loader — no extra dependency). Values in `.env` are
