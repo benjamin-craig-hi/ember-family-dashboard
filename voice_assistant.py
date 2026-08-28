@@ -14,7 +14,7 @@ to point at that box (defaults to localhost).
 
 Wake-word hardening: a debounce (N consecutive frames above threshold),
 a higher threshold, and a post-response cooldown so it only answers a
-deliberate "Hey Jarvis" and doesn't fire on the word "Jarvis" in
+deliberate "Hey Ember" and doesn't fire on the word "Ember" in
 conversation or on its own TTS echo.
 """
 
@@ -756,7 +756,7 @@ def speak(text, voice="af_heart"):
 
 
 def chime():
-    """Play a short two-tone acknowledgment so the user knows Jarvis heard
+    """Play a short two-tone acknowledgment so the user knows Ember heard
     the wake word and is listening for a command."""
     try:
         sr = 24000

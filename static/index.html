@@ -340,8 +340,8 @@
       <select id="set-voice"></select>
     </div>
     <div class="field">
-      <label>Wake word (display only — voice wake word change is coming in Phase 2)</label>
-      <input id="set-wakeword" placeholder="Hey Jarvis">
+      <label>Wake word</label>
+      <input id="set-wakeword" placeholder="Hey Ember">
     </div>
 
     <h3>Notification feed</h3>
@@ -1232,7 +1232,7 @@ function openSettings() {
   document.getElementById('set-assistant').value = _settings.assistant_name || 'Ember';
   const vsel = document.getElementById('set-voice');
   vsel.innerHTML = VOICES.map(v => '<option value="' + v.id + '"' + ((_settings.tts_voice || 'af_heart') === v.id ? ' selected' : '') + '>' + v.label + '</option>').join('');
-  document.getElementById('set-wakeword').value = _settings.wake_word || 'Hey Jarvis';
+  document.getElementById('set-wakeword').value = _settings.wake_word || 'Hey Ember';
   document.getElementById('set-notify-cal').checked = !!_settings.notify_calendar;
   document.getElementById('set-notify-news').checked = !!_settings.notify_news;
   document.getElementById('set-notify-email').checked = !!_settings.notify_email;

@@ -95,13 +95,12 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
 - **Home management** — PIN, sleep window, countdowns, lists.
 
 ### Voice assistant
-- **"Hey Jarvis"** wake word, then speak a command. It can add, list, and delete
+- **"Hey Ember"** wake word (custom-trained model), then speak a command. It can add, list, and delete
   notes, chores, calendar events, grocery items, and photos; read and set the
   meal plan; import iCal feeds; and adjust settings — all by voice. It speaks
   back as **Ember**.
 - The assistant name and TTS voice are read from the shared settings, so
   renaming it in the UI flows through to the voice.
-- A **"Hey Ember"** wake word is in training (see [Roadmap](#roadmap)).
 
 ### On-screen keyboard
 - A built-in touch keyboard, because GNOME's OSK is unreliable with snap
@@ -116,7 +115,7 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
 |-----------|--------|
 | Dashboard | FastAPI + static HTML/JS |
 | LLM | Ollama (`qwen3:8b-q8_0` by default) |
-| Wake word | openWakeWord (`hey_jarvis_v0.1`) |
+| Wake word | openWakeWord (custom `hey_ember` model) |
 | STT | Moonshine ONNX (`moonshine/tiny`) |
 | TTS | Kokoro-82M |
 | VAD | Silero VAD |
@@ -179,8 +178,8 @@ Shipped:
 
 In progress / TODO:
 
-- 🚧 **"Hey Ember" wake word** — custom wake-word model in training; will replace
-  "Hey Jarvis" once deployed.
+- ✅ **"Hey Ember" wake word** — custom-trained model (accuracy 0.865, 0 false
+  positives/hour), deployed and live.
 - 🚧 **BYOK cloud API** — bring-your-own-key routing for chat/voice.
 - ⬜ **Two-way calendar sync** — Google OAuth, iCloud/CalDAV, and Outlook/Graph
   push/pull (needs per-provider credentials).
@@ -297,8 +296,7 @@ systemctl --user enable --now jarvis-voice.service
 
 ## Notes
 
-- The wake word is "Hey Jarvis" (not bare "Jarvis"). A "Hey Ember" wake word is
-  in training (see [Roadmap](#roadmap)).
+- The wake word is "Hey Ember" (not bare "Ember").
 - First wake-word trigger after boot is slow (model warm-up); later ones are
   snappy.
 - Kokoro downloads `en-core-web-sm` (spaCy) and the 82M model on first use.

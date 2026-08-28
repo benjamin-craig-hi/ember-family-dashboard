@@ -77,7 +77,7 @@ DEFAULT_SETTINGS = {
     "date_format": "weekday",      # "weekday" | "numeric" | "long"
     "temp_unit": "F",              # "F" or "C"
     "assistant_name": "Ember",
-    "wake_word": "Hey Jarvis",     # display only; wake-word model change is Phase 2
+    "wake_word": "Hey Ember",     # display only; actual wake-word model is models/hey_ember.onnx
     "tts_voice": "af_heart",
     # Notification feed
     "notify_calendar": True,
