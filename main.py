@@ -3,7 +3,8 @@ import os
 import re
 import urllib.request
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -361,6 +362,88 @@ async def delete_calendar_event(index: int):
     events.pop(index)
     _save("calendar.json", events)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# iCal feed import (Phase 4) — parse a public .ics feed into calendar events.
+# ---------------------------------------------------------------------------
+
+def _unfold_ical(text):
+    """Unfold RFC 5545 line continuations (CRLF + space/tab)."""
+    return re.sub(r"\r?\n[ \t]", "", text)
+
+
+def _ical_to_events(ics_text):
+    """Parse a VCALENDAR into a list of {title, day, time, color, source}."""
+    events = []
+    # Split into VEVENT blocks
+    for block in re.findall(r"BEGIN:VEVENT(.*?)END:VEVENT", ics_text, re.S | re.I):
+        props = {}
+        for line in _unfold_ical(block).splitlines():
+            if ":" not in line:
+                continue
+            name, _, val = line.partition(":")
+            name = name.split(";")[0].strip().upper()
+            val = val.strip()
+            if name in ("SUMMARY", "DTSTART", "DTEND", "UID", "LOCATION", "DESCRIPTION"):
+                props.setdefault(name, val)
+        if not props.get("SUMMARY") or not props.get("DTSTART"):
+            continue
+        dt = props["DTSTART"]
+        # Parse DTSTART (support DATE and DATE-TIME, with or without Z)
+        day = None
+        time_str = ""
+        m = re.match(r"^(\d{4})(\d{2})(\d{2})T?(\d{2})?(\d{2})?(\d{2})?Z?$", dt)
+        if m:
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            day = f"{y:04d}-{mo:02d}-{d:02d}"
+            if m.group(4):
+                hh, mm = int(m.group(4)), int(m.group(5) or 0)
+                # Convert to 12-hour display
+                ampm = "am" if hh < 12 else "pm"
+                h12 = hh % 12 or 12
+                time_str = f"{h12}:{mm:02d}{ampm}"
+        if not day:
+            continue
+        events.append({
+            "title": props["SUMMARY"],
+            "day": day,
+            "time": time_str,
+            "color": "",
+            "source": "ical",
+            "uid": props.get("UID", ""),
+        })
+    return events
+
+
+@app.post("/api/calendar/import-ical")
+async def import_ical(request: Request):
+    """Import events from a public iCal feed URL (merge, dedupe by UID)."""
+    body = await request.json()
+    url = (body.get("url") or "").strip()
+    if not url:
+        return {"ok": False, "error": "no url"}
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Ember/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            ics = resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        return {"ok": False, "error": f"fetch failed: {e}"}
+    imported = _ical_to_events(ics)
+    if not imported:
+        return {"ok": False, "error": "no events found in feed"}
+    events = _load("calendar.json", [])
+    existing_uids = {e.get("uid") for e in events if e.get("uid")}
+    added = 0
+    for ev in imported:
+        if ev.get("uid") and ev["uid"] in existing_uids:
+            continue
+        events.append(ev)
+        if ev.get("uid"):
+            existing_uids.add(ev["uid"])
+        added += 1
+    _save("calendar.json", events)
+    return {"ok": True, "added": added, "total": len(imported)}
 
 
 @app.get("/api/family")

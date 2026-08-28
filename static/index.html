@@ -133,6 +133,14 @@
   .cal-grid { flex:1; display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr); gap:4px; min-height:0; }
   .cal-cell { background:#22262f; border-radius:6px; padding:6px; overflow:hidden; display:flex; flex-direction:column; }
   .cal-cell.empty { background:transparent; }
+  .cal-view-toggle { display:flex; gap:4px; margin-left:auto; }
+  .cal-view-btn { background:#22262f; color:var(--muted); border:1px solid #333a46; border-radius:6px; padding:4px 10px; font-size:.8rem; cursor:pointer; }
+  .cal-view-btn.active { background:var(--accent); color:#111; border-color:var(--accent); }
+  .cal-day-col { display:flex; flex-direction:column; gap:4px; min-height:0; overflow-y:auto; }
+  .cal-day-head { text-align:center; color:var(--muted); font-size:.8rem; font-weight:600; padding:4px; }
+  .cal-day-head.today { color:var(--accent); }
+  .cal-day-cell { background:#22262f; border-radius:6px; padding:6px; min-height:60px; overflow:hidden; display:flex; flex-direction:column; gap:2px; }
+  .cal-day-cell.today { outline:2px solid var(--accent); }
   .cal-cell.today { outline:2px solid var(--accent); }
   .cal-num { font-weight:700; color:var(--muted); font-size:.85rem; margin-bottom:3px; }
   .cal-cell.today .cal-num { color:var(--accent); }
@@ -221,8 +229,13 @@
       <h2 id="cal-title">Calendar</h2>
       <button class="cal-nav" onclick="calShift(1)">&#8250;</button>
       <button class="cal-today" onclick="calToday()">Today</button>
+      <div class="cal-view-toggle">
+        <button id="view-month" class="cal-view-btn active" onclick="setCalView('month')">Month</button>
+        <button id="view-week" class="cal-view-btn" onclick="setCalView('week')">Week</button>
+        <button id="view-day" class="cal-view-btn" onclick="setCalView('day')">Day</button>
+      </div>
     </div>
-    <div class="cal-weekdays">
+    <div class="cal-weekdays" id="cal-weekdays">
       <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
     </div>
     <div class="cal-grid" id="cal-grid"></div>
@@ -545,6 +558,7 @@ let _last = { cal: '', chores: '', notes: '' };
 let _events = [];
 let _chores = [];
 let _calView = { y: 0, m: 0 };
+let _calMode = 'month';   // 'month' | 'week' | 'day'
 let _family = [];
 
 function esc(s) {
@@ -579,29 +593,44 @@ function resolveDay(dayStr) {
   return null;
 }
 
-function renderCalendar() {
+function _evHtml(e) {
+  const idx = _events.indexOf(e);
+  const color = e.color || '';
+  const style = color ? ' style="border-left-color:' + esc(color) + ';background:' + esc(color) + '22"' : '';
+  return '<div class="cal-ev"' + style + ' onclick="openEditEvent(' + idx + ')" title="Edit event">' + (e.time ? '<span class="cal-ev-time">' + esc(e.time) + '</span> ' : '') + esc(e.title) + '</div>';
+}
+
+function _eventsOn(date) {
+  return _events.filter(e => {
+    const rd = resolveDay(e.day);
+    return rd && rd.getTime() === date.getTime();
+  });
+}
+
+function _renderWeekdayHeader(dates) {
+  const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return dates.map((d, i) => {
+    const isToday = d.getTime() === today.getTime();
+    return '<div class="cal-day-head' + (isToday ? ' today' : '') + '">' + names[i] + ' ' + d.getDate() + '</div>';
+  }).join('');
+}
+
+function renderMonth() {
   const y = _calView.y, m = _calView.m;
   const first = new Date(y, m, 1);
   const startDow = first.getDay();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const today = new Date(); today.setHours(0, 0, 0, 0);
   document.getElementById('cal-title').textContent = first.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  document.getElementById('cal-weekdays').innerHTML = '<span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>';
 
   let cells = '';
   for (let i = 0; i < startDow; i++) cells += '<div class="cal-cell empty"></div>';
   for (let d = 1; d <= daysInMonth; d++) {
     const date = new Date(y, m, d);
     const isToday = date.getTime() === today.getTime();
-    const evs = _events.filter(e => {
-      const rd = resolveDay(e.day);
-      return rd && rd.getTime() === date.getTime();
-    });
-    const evHtml = evs.map(e => {
-      const idx = _events.indexOf(e);
-      const color = e.color || '';
-      const style = color ? ' style="border-left-color:' + esc(color) + ';background:' + esc(color) + '22"' : '';
-      return '<div class="cal-ev"' + style + ' onclick="openEditEvent(' + idx + ')" title="Edit event">' + (e.time ? '<span class="cal-ev-time">' + esc(e.time) + '</span> ' : '') + esc(e.title) + '</div>';
-    }).join('');
+    const evHtml = _eventsOn(date).map(_evHtml).join('');
     cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '"><div class="cal-num">' + d + '</div>' + evHtml + '</div>';
   }
   const total = startDow + daysInMonth;
@@ -623,16 +652,83 @@ function renderCalendar() {
   document.getElementById('cal-upcoming').innerHTML = upHtml || '<div class="item"><div class="t">No upcoming events</div></div>';
 }
 
+function renderWeek() {
+  const y = _calView.y, m = _calView.m, d = _calView.d;
+  const anchor = new Date(y, m, d);
+  const dow = anchor.getDay();
+  const start = new Date(anchor); start.setDate(anchor.getDate() - dow);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  document.getElementById('cal-title').textContent = 'Week of ' + start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  const dates = [];
+  for (let i = 0; i < 7; i++) { const dt = new Date(start); dt.setDate(start.getDate() + i); dates.push(dt); }
+  document.getElementById('cal-weekdays').innerHTML = _renderWeekdayHeader(dates);
+
+  const cols = dates.map(date => {
+    const isToday = date.getTime() === today.getTime();
+    const evHtml = _eventsOn(date).map(_evHtml).join('');
+    return '<div class="cal-day-cell' + (isToday ? ' today' : '') + '">' + (evHtml || '<div class="muted">—</div>') + '</div>';
+  }).join('');
+  document.getElementById('cal-grid').innerHTML = '<div class="cal-day-col" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;flex:1;min-height:0;">' + cols + '</div>';
+  document.getElementById('cal-upcoming').innerHTML = '';
+}
+
+function renderDay() {
+  const y = _calView.y, m = _calView.m, d = _calView.d;
+  const date = new Date(y, m, d);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const isToday = date.getTime() === today.getTime();
+  document.getElementById('cal-title').textContent = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  document.getElementById('cal-weekdays').innerHTML = '';
+
+  const evs = _eventsOn(date).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  const html = evs.map(e => {
+    const idx = _events.indexOf(e);
+    const color = e.color || '';
+    const style = 'cursor:pointer' + (color ? ';border-left:3px solid ' + esc(color) : '');
+    return '<div class="item" style="' + style + '" onclick="openEditEvent(' + idx + ')"><div class="t">' + esc(e.title) + '</div><div class="d">' + (e.time || 'All day') + '</div></div>';
+  }).join('');
+  document.getElementById('cal-grid').innerHTML = '<div class="cal-day-col" style="flex:1;min-height:0;overflow-y:auto;">' + (html || '<div class="item"><div class="t">No events</div></div>') + '</div>';
+  document.getElementById('cal-upcoming').innerHTML = '';
+}
+
+function renderCalendar() {
+  if (_calMode === 'week') renderWeek();
+  else if (_calMode === 'day') renderDay();
+  else renderMonth();
+}
+
+function setCalView(mode) {
+  _calMode = mode;
+  const now = new Date();
+  if (!_calView.d) _calView.d = now.getDate();
+  document.getElementById('view-month').classList.toggle('active', mode === 'month');
+  document.getElementById('view-week').classList.toggle('active', mode === 'week');
+  document.getElementById('view-day').classList.toggle('active', mode === 'day');
+  renderCalendar();
+}
+
 function calShift(delta) {
-  _calView.m += delta;
-  if (_calView.m < 0) { _calView.m = 11; _calView.y--; }
-  if (_calView.m > 11) { _calView.m = 0; _calView.y++; }
+  if (_calMode === 'day') {
+    const d = new Date(_calView.y, _calView.m, _calView.d);
+    d.setDate(d.getDate() + delta);
+    _calView.y = d.getFullYear(); _calView.m = d.getMonth(); _calView.d = d.getDate();
+  } else if (_calMode === 'week') {
+    const d = new Date(_calView.y, _calView.m, _calView.d);
+    d.setDate(d.getDate() + delta * 7);
+    _calView.y = d.getFullYear(); _calView.m = d.getMonth(); _calView.d = d.getDate();
+  } else {
+    _calView.m += delta;
+    if (_calView.m < 0) { _calView.m = 11; _calView.y--; }
+    if (_calView.m > 11) { _calView.m = 0; _calView.y++; }
+  }
   renderCalendar();
 }
 function calToday() {
   const now = new Date();
   _calView.y = now.getFullYear();
   _calView.m = now.getMonth();
+  _calView.d = now.getDate();
   renderCalendar();
 }
 
@@ -1103,12 +1199,28 @@ function renderCalConns() {
     const opts = CAL_PROVIDERS.map(p =>
       '<option value="' + esc(p) + '"' + (c.provider === p ? ' selected' : '') + '>' + esc(p) + '</option>'
     ).join('');
+    const importBtn = (c.provider === 'iCal feed')
+      ? '<button class="btn ghost" onclick="importIcal(' + i + ')">Import</button>'
+      : '';
     return '<div class="calconn-row">' +
       '<select onchange="calConnChange(' + i + ', \'provider\', this.value)">' + opts + '</select>' +
       '<input type="text" placeholder="Calendar URL" value="' + esc(c.url || '') + '" onchange="calConnChange(' + i + ', \'url\', this.value)">' +
+      importBtn +
       '<button class="del" onclick="calConnDelete(' + i + ')">✕</button>' +
       '</div>';
   }).join('');
+}
+async function importIcal(i) {
+  const conns = _settings.calendar_connections || [];
+  const c = conns[i];
+  if (!c || !c.url) { alert('Enter a calendar URL first'); return; }
+  const r = await fetch('/api/calendar/import-ical', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: c.url }),
+  });
+  const d = await r.json();
+  if (d.ok) { alert('Imported ' + d.added + ' events'); loadCalendar(); }
+  else { alert('Import failed: ' + (d.error || 'unknown')); }
 }
 function addCalConn() {
   const conns = (_settings.calendar_connections || []).slice();
