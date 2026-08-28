@@ -1,23 +1,73 @@
-# Family Dashboard
+# Ember Family Dashboard
 
-A fully-local, wall-mounted family dashboard with a voice assistant. Runs on a
-CPU-only Linux kiosk (no GPU, no telephony, no cloud). Wake word → mic → STT →
-LLM → TTS, plus a touch-friendly on-screen keyboard and a notes/chores/calendar
-board.
+> *Light from within the home.*
 
-Everything runs on-device. The only optional network hop is the LLM, which can
-be offloaded to a GPU workstation on the LAN via `OLLAMA_HOST`.
+A self-hosted, wall-mounted family dashboard with a voice assistant. Take an old
+unused touchscreen laptop or tablet, point it at the wall, and turn it into the
+heart of the home — no cloud, no subscription, no lock-in.
+
+Runs on a CPU-only Linux kiosk (no GPU, no telephony, no cloud). Wake word → mic
+→ STT → LLM → TTS, plus a touch-friendly on-screen keyboard and a full family
+board: calendar, chores, notes, star-powered rewards, live weather, and a
+rotating notification feed.
+
+Everything runs on-device. The only optional network hops are the LLM (which can
+be offloaded to a GPU workstation on the LAN via `OLLAMA_HOST`), the weather
+(Open-Meteo, no API key), and an optional RSS news feed.
 
 ## Features
 
-- **Voice assistant** — "Hey Jarvis" wake word, then speak a command. It can
-  add notes, chores, and calendar events by voice.
-- **Family board** — a month-view calendar as the main pane, with chores and
-  notes stacked in a narrower right-hand column, plus a chat box.
-- **On-screen keyboard** — a built-in touch keyboard, because GNOME's OSK is
-  unreliable with snap Chromium in kiosk mode.
-- **Fully local** — wake word, speech-to-text, and text-to-speech all run on
-  the kiosk's CPU.
+### Family board
+- **Month-view calendar** as the main pane (takes ~3/4 of the screen), with
+  day/week/month navigation and a "today" highlight.
+- **Chores** — checkable tasks with star values and a colored assignee chip per
+  family member.
+- **Notes** — a shared scratchpad.
+- **Chat box** — type a request ("Ask Ember…") and the assistant can add notes,
+  chores, and calendar events via tool calling.
+
+### Star-Powered Rewards (Phase 1)
+- Chores carry **star values** and an **assignee**.
+- Checking off a chore **awards stars** to that member (idempotent — re-checking
+  doesn't double-award).
+- A **reward store** with per-member star balances and a tap-to-select claim
+  picker.
+- **Milestone celebrations** — a big emoji pop when a member crosses a star
+  threshold (10 / 25 / 50, configurable).
+
+### Top bar
+- **Live weather** — current temp, condition icon, and today's high/low, centered
+  in the header. Sourced from Open-Meteo (no API key). Location is configured in
+  settings.
+- **Live clock** — 12h or 24h, with three date formats.
+- **Notification feed** — a rotating one-line pill that cycles through upcoming
+  calendar events (next 7 days), an optional RSS news feed, and (soon) email.
+  Rotation speed is configurable.
+
+### Settings (⚙️)
+- **Family members** — add, rename, recolor (color picker), and delete. Colors
+  flow through to chore chips and the reward picker.
+- **Location** — auto-geocoded for weather.
+- **Date & time** — 12h/24h, three date formats, °F/°C.
+- **Assistant** — name and wake word.
+- **Notification feed** — toggle calendar/news/email, set the news URL, set
+  rotation speed.
+- **Calendar connections** — add/remove connections (Google Calendar, iCloud,
+  Outlook, CalDAV, iCal feed) with URLs. *(Config layer only — actual sync is a
+  later phase.)*
+
+### Voice assistant
+- **"Hey Jarvis"** wake word, then speak a command. It can add notes, chores,
+  and calendar events by voice, and speaks back as **Ember**.
+- The assistant name and TTS voice are read from the shared settings, so
+  renaming it in the UI flows through to the voice.
+
+### On-screen keyboard
+- A built-in touch keyboard, because GNOME's OSK is unreliable with snap
+  Chromium in kiosk mode.
+
+### Fully local
+- Wake word, speech-to-text, and text-to-speech all run on the kiosk's CPU.
 
 ## Architecture
 
@@ -30,14 +80,19 @@ be offloaded to a GPU workstation on the LAN via `OLLAMA_HOST`.
 | TTS | Kokoro-82M |
 | VAD | Silero VAD |
 | Mic capture | `sounddevice` via PipeWire "default" device |
+| Weather | Open-Meteo (no API key) |
+| News feed | RSS/Atom (stdlib parser) |
 
 ## Files
 
-- `main.py` — FastAPI dashboard (board + chat + tool calling)
+- `main.py` — FastAPI dashboard (board + chat + tool calling + weather +
+  notifications + settings + rewards)
 - `voice_assistant.py` — the standalone voice loop (wake → VAD → STT → LLM → TTS)
-- `static/index.html` — the dashboard UI with the on-screen keyboard
+- `static/index.html` — the dashboard UI (calendar, chores, notes, rewards,
+  weather, clock, notification feed, settings, on-screen keyboard)
 - `jarvis-voice.service` — systemd **user** service for the voice loop
 - `record_wakeword.py` — records clips to train a custom wake word (optional)
+- `docs/plans/` — roadmap and phase plans
 
 ## Setup
 
@@ -63,6 +118,9 @@ pip install --force-reinstall \
 
 pip install "transformers==4.46.3" "huggingface-hub>=1.5.0,<2.0" "tokenizers>=0.22.0,<=0.23.0"
 ```
+
+> The weather and notification feed use only the Python standard library
+> (`urllib`, `re`, `json`) — no extra dependencies.
 
 ### 3. Configure the LLM
 
@@ -106,11 +164,14 @@ systemctl --user enable --now jarvis-voice.service
 
 ## Notes
 
-- The wake word is "Hey Jarvis" (not bare "Jarvis").
+- The wake word is "Hey Jarvis" (not bare "Jarvis"). A "Hey Ember" wake word is
+  planned for a later phase (it needs custom wake-word training).
 - First wake-word trigger after boot is slow (model warm-up); later ones are
   snappy.
 - Kokoro downloads `en-core-web-sm` (spaCy) and the 82M model on first use.
 - The `af_heart` TTS voice is female/warm; `am_michael`/`am_adam` are male.
+- Runtime data (calendar, chores, notes, family, rewards, milestones, settings)
+  lives in `data/` and is git-ignored — family data is never committed.
 
 ## License
 
