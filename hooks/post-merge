@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # After a deploy (git pull), reload the kiosk browser.
-# Runs detached with a short delay so the backend service restart
-# (which happens right after `git pull` in the deploy command) completes first.
+# Uses systemd-run --user so the reload survives SSH session teardown
+# (a plain `setsid ... &` gets killed when the deploy SSH session closes).
 set -u
 
 TOP="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 SCRIPT="$TOP/scripts/reload-kiosk.sh"
 [ -x "$SCRIPT" ] || exit 0
 
-setsid bash -c "sleep 5; exec '$SCRIPT'" >/dev/null 2>&1 < /dev/null &
+# Run as a transient user unit, delayed 5s so the backend restart completes first.
+systemd-run --user --on-active=5 --unit=ember-reload-$$ \
+  --description="Ember kiosk browser reload" \
+  "$SCRIPT" >/dev/null 2>&1 || \
+  setsid bash -c "sleep 5; exec '$SCRIPT'" >/dev/null 2>&1 < /dev/null &
 
 exit 0
