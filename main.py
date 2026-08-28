@@ -35,6 +35,8 @@ OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 _client = Client(host=OLLAMA_HOST)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
+PHOTOS_DIR = os.path.join(BASE_DIR, "photos")
+os.makedirs(PHOTOS_DIR, exist_ok=True)
 
 app = FastAPI(title="Family Dashboard")
 
@@ -84,6 +86,9 @@ DEFAULT_SETTINGS = {
     "notify_interval": 10,         # seconds between rotating feed items
     # Calendar connections (configured now; sync is a later phase)
     "calendar_connections": [],    # [{provider, url}]
+    # Screensaver (Phase 3)
+    "screensaver_enabled": True,
+    "screensaver_idle_minutes": 5,
 }
 
 
@@ -637,4 +642,54 @@ def get_notifications():
     return {"ok": True, "items": feed, "interval": s.get("notify_interval", 10)}
 
 
+# ---------------------------------------------------------------------------
+# Photos & videos (Phase 3 — screensaver)
+# ---------------------------------------------------------------------------
+_PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+_VIDEO_EXTS = {".mp4", ".m4v", ".mov", ".webm"}
+
+
+@app.get("/api/photos")
+def list_photos():
+    files = []
+    for fn in sorted(os.listdir(PHOTOS_DIR)):
+        ext = os.path.splitext(fn)[1].lower()
+        if ext in _PHOTO_EXTS or ext in _VIDEO_EXTS:
+            files.append({
+                "name": fn,
+                "url": "/photos/" + fn,
+                "type": "video" if ext in _VIDEO_EXTS else "image",
+            })
+    return {"ok": True, "photos": files}
+
+
+@app.post("/api/photos")
+async def upload_photo(request: Request):
+    name = os.path.basename(request.query_params.get("name", ""))
+    if not name or "." not in name:
+        return {"ok": False, "error": "invalid name"}
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in _PHOTO_EXTS and ext not in _VIDEO_EXTS:
+        return {"ok": False, "error": "unsupported file type"}
+    data = await request.body()
+    if not data:
+        return {"ok": False, "error": "empty body"}
+    if len(data) > 200 * 1024 * 1024:
+        return {"ok": False, "error": "file too large (200 MB max)"}
+    with open(os.path.join(PHOTOS_DIR, name), "wb") as f:
+        f.write(data)
+    return {"ok": True, "name": name, "url": "/photos/" + name}
+
+
+@app.delete("/api/photos/{name}")
+def delete_photo(name: str):
+    name = os.path.basename(name)
+    p = os.path.join(PHOTOS_DIR, name)
+    if os.path.exists(p) and os.path.isfile(p):
+        os.remove(p)
+        return {"ok": True}
+    return {"ok": False, "error": "not found"}
+
+
+app.mount("/photos", StaticFiles(directory=PHOTOS_DIR), name="photos")
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"), html=True), name="static")

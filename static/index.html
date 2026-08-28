@@ -169,9 +169,24 @@
   .osk-key.space { max-width:425px; }
   .osk-key.fn { background:#2a2f3a; color:var(--accent); }
   .osk-key.done { background:var(--accent); color:#111; }
+
+  /* ---- Screensaver (Phase 3) ---- */
+  #screensaver {
+    position:fixed; inset:0; z-index:9000; background:#000; display:none;
+    align-items:center; justify-content:center; cursor:none;
+  }
+  #screensaver.show { display:flex; }
+  #screensaver img, #screensaver video {
+    max-width:100%; max-height:100%; object-fit:contain;
+  }
+  #screensaver .ss-empty { color:#555; font-size:1.4rem; text-align:center; padding:40px; }
+  .photo-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 10px; background:#22262f; border-radius:6px; margin-bottom:6px; }
+  .photo-row span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .muted { color:var(--muted); font-size:.85rem; }
 </style>
 </head>
 <body>
+<div id="screensaver"></div>
 <header>
   <div class="header-left">
     <span class="brand">Ember</span>
@@ -326,6 +341,21 @@
     <h3>Calendar connections</h3>
     <div id="cal-conn-list"></div>
     <button class="btn ghost" onclick="addCalConn()">+ Add calendar connection</button>
+
+    <h3>Screensaver</h3>
+    <div class="field">
+      <label class="check"><input type="checkbox" id="set-ss-enabled"> Enable photo screensaver when idle</label>
+    </div>
+    <div class="field">
+      <label>Idle time before screensaver (minutes)</label>
+      <input id="set-ss-idle" type="number" min="1" max="120" placeholder="5">
+    </div>
+    <div class="field">
+      <label>Photos</label>
+      <div id="photo-list"></div>
+      <input type="file" id="photo-file" accept="image/*,video/*" multiple style="display:none">
+      <button class="btn ghost" onclick="document.getElementById('photo-file').click()">+ Add photos / videos</button>
+    </div>
 
     <div class="settings-actions">
       <button class="btn ghost" onclick="closeSettings()">Cancel</button>
@@ -1054,9 +1084,12 @@ function openSettings() {
   document.getElementById('set-notify-email').checked = !!_settings.notify_email;
   if (!_settings.news_feeds || !_settings.news_feeds.length) _settings.news_feeds = [NEWS_PRESETS[0].url];
   document.getElementById('set-notify-interval').value = _settings.notify_interval || 10;
+  document.getElementById('set-ss-enabled').checked = _settings.screensaver_enabled !== false;
+  document.getElementById('set-ss-idle').value = _settings.screensaver_idle_minutes || 5;
   renderMemberRows();
   renderCalConns();
   renderNewsFeeds();
+  loadPhotos();
   document.getElementById('settings').classList.add('show');
 }
 function closeSettings() { document.getElementById('settings').classList.remove('show'); }
@@ -1157,6 +1190,8 @@ async function saveSettings() {
     news_feeds: (_settings.news_feeds || []).filter(u => u && u.trim()),
     notify_interval: parseInt(document.getElementById('set-notify-interval').value, 10) || 10,
     calendar_connections: _settings.calendar_connections || [],
+    screensaver_enabled: document.getElementById('set-ss-enabled').checked,
+    screensaver_idle_minutes: parseInt(document.getElementById('set-ss-idle').value, 10) || 5,
   };
   // geocode the location to lat/lon
   try {
@@ -1205,6 +1240,96 @@ function celebrate(emoji, msg) {
   setTimeout(() => el.classList.remove('show'), 3000);
 }
 
+// ---- Screensaver (Phase 3) ----
+let _photos = [];
+let _ssIdx = 0;
+let _ssTimer = null;
+let _idleTimer = null;
+let _lastActivity = Date.now();
+
+function resetIdle() { _lastActivity = Date.now(); }
+['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel'].forEach(ev =>
+  document.addEventListener(ev, resetIdle, { passive: true }));
+
+async function loadPhotos() {
+  try {
+    const r = await fetch('/api/photos');
+    const d = await r.json();
+    _photos = d.photos || [];
+    renderPhotoList();
+  } catch (e) {}
+}
+
+function renderPhotoList() {
+  const el = document.getElementById('photo-list');
+  if (!el) return;
+  if (!_photos.length) { el.innerHTML = '<div class="muted">No photos yet — add some below.</div>'; return; }
+  el.innerHTML = _photos.map((p, i) =>
+    '<div class="photo-row"><span>' + esc(p.name) + '</span>' +
+    '<button class="btn ghost" onclick="deletePhoto(' + i + ')">✕</button></div>'
+  ).join('');
+}
+
+async function deletePhoto(i) {
+  const p = _photos[i];
+  if (!p) return;
+  await fetch('/api/photos/' + encodeURIComponent(p.name), { method: 'DELETE' });
+  loadPhotos();
+}
+
+async function uploadPhotos(files) {
+  for (const f of files) {
+    await fetch('/api/photos?name=' + encodeURIComponent(f.name), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: f,
+    });
+  }
+  loadPhotos();
+}
+
+function showScreensaver() {
+  const el = document.getElementById('screensaver');
+  if (!_photos.length) {
+    el.innerHTML = '<div class="ss-empty">No photos yet.<br>Add some in Settings → Screensaver.</div>';
+    el.classList.add('show');
+    return;
+  }
+  const p = _photos[_ssIdx % _photos.length];
+  _ssIdx++;
+  if (p.type === 'video') {
+    el.innerHTML = '<video src="' + p.url + '" autoplay muted loop playsinline></video>';
+  } else {
+    el.innerHTML = '<img src="' + p.url + '" alt="">';
+  }
+  el.classList.add('show');
+}
+
+function hideScreensaver() {
+  const el = document.getElementById('screensaver');
+  el.classList.remove('show');
+  el.innerHTML = '';
+}
+
+function ssTick() {
+  const enabled = _settings.screensaver_enabled !== false;
+  const idleMin = parseInt(_settings.screensaver_idle_minutes, 10) || 5;
+  const idleMs = Date.now() - _lastActivity;
+  const showing = document.getElementById('screensaver').classList.contains('show');
+  if (enabled && !showing && idleMs >= idleMin * 60 * 1000) {
+    showScreensaver();
+  } else if (showing && idleMs < idleMin * 60 * 1000) {
+    hideScreensaver();
+  }
+}
+
+// rotate to next photo every 8s while screensaver is showing
+setInterval(() => {
+  if (document.getElementById('screensaver').classList.contains('show') && _photos.length > 1) {
+    showScreensaver();
+  }
+}, 8000);
+
 initCalView();
 loadSettings().then(() => loadNotifications());
 loadMilestones();
@@ -1214,6 +1339,12 @@ setInterval(tickClock, 1000);
 loadWeather();
 setInterval(loadWeather, 600000);   // refresh weather every 10 min
 setInterval(loadNotifications, 300000);  // refresh feed every 5 min
+loadPhotos();
+setInterval(ssTick, 1000);   // screensaver idle check every second
+document.getElementById('photo-file').addEventListener('change', (e) => {
+  if (e.target.files && e.target.files.length) uploadPhotos(e.target.files);
+  e.target.value = '';
+});
 // Auto-refresh: poll for changes so entries added by the agent (chat or voice)
 // appear without a manual F5. Diff-aware loaders prevent flicker on no-change polls.
 setInterval(refreshAll, 3000);

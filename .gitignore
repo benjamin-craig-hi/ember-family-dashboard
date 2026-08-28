@@ -5,6 +5,9 @@ notes.json
 chores.json
 voice_config.json
 
+# Photos & videos (screensaver) — never commit family media
+photos/
+
 # Python
 __pycache__/
 *.pyc
