@@ -905,5 +905,86 @@ def delete_custom_item(index: int, item_index: int):
     return {"ok": False, "error": "index out of range"}
 
 
+# ---------------------------------------------------------------------------
+# Grocery export (Phase 6) — replaces Instacart with a plain-text export
+# ---------------------------------------------------------------------------
+
+@app.get("/api/lists/grocery/export")
+def export_grocery():
+    """Return the grocery list as plain text (one item per line, unchecked only)."""
+    l = _load_lists()
+    items = [it.get("text", "") for it in l.get("grocery", []) if not it.get("done")]
+    return {"ok": True, "text": "\n".join(items)}
+
+
+@app.get("/api/lists/grocery/export.txt")
+def export_grocery_txt():
+    """Plain-text download of the grocery list (for copy/paste or sharing)."""
+    l = _load_lists()
+    items = [it.get("text", "") for it in l.get("grocery", []) if not it.get("done")]
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse("\n".join(items) + ("\n" if items else ""))
+
+
+# ---------------------------------------------------------------------------
+# Meal planning (Phase 6)
+# ---------------------------------------------------------------------------
+
+def _load_meals():
+    return _load("meals.json", {"days": {}})
+
+
+def _save_meals(m):
+    _save("meals.json", m)
+
+
+@app.get("/api/meals")
+def get_meals():
+    return {"ok": True, "meals": _load_meals()}
+
+
+@app.put("/api/meals")
+async def put_meals(request: Request):
+    body = await request.json()
+    days = body.get("days", {})
+    if not isinstance(days, dict):
+        return {"ok": False, "error": "days must be an object"}
+    m = _load_meals()
+    m["days"] = days
+    _save_meals(m)
+    return {"ok": True}
+
+
+@app.post("/api/meals/suggest")
+async def suggest_meals(request: Request):
+    """Ask the LLM to suggest a meal plan for the week."""
+    body = await request.json()
+    days = body.get("days") or ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    preferences = (body.get("preferences") or "").strip()
+    today = datetime.now().strftime("%A, %B %d, %Y")
+    prompt = (
+        f"Today is {today}. Suggest a simple, family-friendly dinner for each day. "
+        f"Days: {', '.join(days)}."
+    )
+    if preferences:
+        prompt += f" Preferences/constraints: {preferences}."
+    prompt += " Return ONLY a JSON object mapping each day name to a short meal name (e.g. {\"Monday\": \"Spaghetti\"}). No other text."
+    try:
+        resp = _client.chat(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            options={"num_ctx": 2048},
+        )
+        content = (resp.message.content or "").strip()
+        # Extract JSON object from the response (strip any markdown fences)
+        m = re.search(r"\{.*\}", content, re.S)
+        if not m:
+            return {"ok": False, "error": "could not parse suggestion"}
+        plan = json.loads(m.group(0))
+        return {"ok": True, "plan": plan}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 app.mount("/photos", StaticFiles(directory=PHOTOS_DIR), name="photos")
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"), html=True), name="static")

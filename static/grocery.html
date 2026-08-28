@@ -13,6 +13,8 @@
   .add { display:flex; gap:8px; margin-bottom:16px; }
   .add input { flex:1; background:var(--panel); border:1px solid #333a46; border-radius:8px; padding:12px; color:var(--text); font-size:1rem; }
   .add button { background:var(--accent); color:#111; border:none; border-radius:8px; padding:0 18px; font-size:1.2rem; font-weight:700; }
+  .toolbar { margin-bottom:12px; }
+  .toolbar button.ghost { background:var(--panel); color:var(--text); border:1px solid #333a46; border-radius:8px; padding:10px 14px; font-weight:600; }
   ul { list-style:none; }
   li { display:flex; align-items:center; gap:10px; background:var(--panel); border-radius:8px; padding:12px; margin-bottom:8px; }
   li input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
@@ -29,6 +31,9 @@
   <div class="add">
     <input id="in" placeholder="Add an item..." autocomplete="off">
     <button onclick="add()">+</button>
+  </div>
+  <div class="toolbar">
+    <button class="ghost" onclick="exportList()">📋 Export list</button>
   </div>
   <ul id="list"></ul>
   <div class="footer">Ember — light from within the home</div>
@@ -64,6 +69,20 @@ async function toggle(i, done) {
 async function del(i) {
   await fetch('/api/lists/grocery/' + i, { method:'DELETE' });
   load();
+}
+async function exportList() {
+  const r = await fetch('/api/lists/grocery/export');
+  const d = await r.json();
+  const text = d.text || '';
+  if (!text) { alert('Nothing to export'); return; }
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Grocery List', text }); return; } catch (e) {}
+  }
+  if (navigator.clipboard) {
+    try { await navigator.clipboard.writeText(text); alert('Copied to clipboard'); return; } catch (e) {}
+  }
+  // Fallback: open the plain-text URL
+  window.open('/api/lists/grocery/export.txt', '_blank');
 }
 document.getElementById('in').addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
 load();

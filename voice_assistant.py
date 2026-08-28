@@ -340,6 +340,42 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_meal_plan",
+            "description": "Read the current weekly meal plan",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_meal",
+            "description": "Set the meal for a specific day of the week",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "day": {"type": "string", "description": "Day of the week, e.g. 'Monday'"},
+                    "meal": {"type": "string", "description": "The meal name"},
+                },
+                "required": ["day", "meal"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "suggest_meals",
+            "description": "Ask Ember to suggest a meal plan for the week (optionally with preferences)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "preferences": {"type": "string", "description": "Optional preferences or constraints, e.g. 'no beef, quick meals'"},
+                },
+            },
+        },
+    },
 ]
 
 
@@ -516,6 +552,40 @@ def remove_grocery_item(text):
     return removed
 
 
+def _load_meals():
+    return _load_json("meals.json", {"days": {}})
+
+
+def _save_meals(m):
+    _save_json("meals.json", m)
+
+
+def get_meal_plan():
+    m = _load_meals()
+    return m.get("days", {})
+
+
+def set_meal(day, meal):
+    m = _load_meals()
+    m.setdefault("days", {})[day] = meal
+    _save_meals(m)
+
+
+def suggest_meals(preferences=""):
+    """Ask the backend LLM to suggest a weekly meal plan."""
+    try:
+        data = json.dumps({"preferences": preferences or ""}).encode("utf-8")
+        req = urllib.request.Request(
+            BACKEND_URL + "/api/meals/suggest",
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 # Valid settings keys the voice assistant may change (mirrors main.py DEFAULT_SETTINGS)
 _SETTING_KEYS = {
     "assistant_name", "tts_voice", "location", "time_format", "date_format",
@@ -577,6 +647,13 @@ def run_tool(name, args):
         return json.dumps(list_grocery())
     elif name == "remove_grocery_item":
         return ("deleted" if remove_grocery_item(args.get("text", "")) else "not_found")
+    elif name == "get_meal_plan":
+        return json.dumps(get_meal_plan())
+    elif name == "set_meal":
+        set_meal(args.get("day", ""), args.get("meal", ""))
+        return "saved"
+    elif name == "suggest_meals":
+        return json.dumps(suggest_meals(args.get("preferences", "")))
     elif name == "get_settings":
         return json.dumps(get_settings())
     elif name == "update_settings":
@@ -777,7 +854,9 @@ def ask_llm(text):
         "When the user asks to add something to the grocery list, use the add_grocery_item tool. "
         "When they ask what's on the grocery list, use list_grocery. "
         "When they ask to remove something from the grocery list, first use list_grocery to find the exact item, "
-        "then use remove_grocery_item with that text."
+        "then use remove_grocery_item with that text. "
+        "When the user asks about the meal plan, use get_meal_plan to read it, set_meal to set a specific day's meal, "
+        "or suggest_meals to propose a weekly plan."
     )
     messages = [
         {"role": "system", "content": system},

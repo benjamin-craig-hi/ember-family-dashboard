@@ -156,6 +156,7 @@
   #chatbox input { flex:1; background:#1a1d24; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:12px; font-size:1rem; }
   #chatbox button { background:var(--accent); color:#111; border:none; border-radius:8px; padding:12px 20px; font-weight:700; cursor:pointer; }
   #talk { background:#2a6f4a; color:#fff; border:none; border-radius:8px; padding:12px 20px; font-weight:700; cursor:pointer; }
+  .footer-link { display:flex; align-items:center; justify-content:center; width:44px; background:#22262f; border:1px solid #333a46; border-radius:8px; text-decoration:none; font-size:1.2rem; }
   #reply { padding:12px 16px; color:var(--muted); font-size:.95rem; min-height:20px; }
 
   /* ---- On-screen keyboard (25% larger) ---- */
@@ -275,6 +276,8 @@
 <footer>
   <div id="chatbox"><input id="chat-in" placeholder="Ask Ember..."><button onclick="ask()">Send</button></div>
   <button id="talk" onclick="talk()">🎤 Talk</button>
+  <a class="footer-link" href="/meals.html" title="Meal plan">🍽️</a>
+  <a class="footer-link" href="/grocery.html" title="Grocery list">🛒</a>
 </footer>
 
 <!-- Member picker modal -->

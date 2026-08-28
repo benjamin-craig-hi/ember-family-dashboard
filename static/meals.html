@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ember — Meal Plan</title>
+<style>
+  :root { --bg:#14161c; --panel:#1c1f27; --accent:#eab676; --text:#e8e6e1; --muted:#8a8f98; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; min-height:100vh; padding:16px; }
+  h1 { font-size:1.4rem; margin-bottom:4px; }
+  .sub { color:var(--muted); font-size:.85rem; margin-bottom:16px; }
+  .toolbar { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .toolbar input { flex:1; min-width:140px; background:var(--panel); border:1px solid #333a46; border-radius:8px; padding:10px; color:var(--text); font-size:.9rem; }
+  .toolbar button { background:var(--accent); color:#111; border:none; border-radius:8px; padding:10px 14px; font-weight:700; }
+  .toolbar button.ghost { background:var(--panel); color:var(--text); border:1px solid #333a46; }
+  .day { background:var(--panel); border-radius:8px; padding:12px; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+  .day .name { width:110px; font-weight:600; color:var(--accent); }
+  .day input { flex:1; background:transparent; border:none; border-bottom:1px solid #333a46; color:var(--text); font-size:1rem; padding:4px; }
+  .day input:focus { outline:none; border-bottom-color:var(--accent); }
+  .footer { margin-top:20px; text-align:center; color:var(--muted); font-size:.75rem; }
+</style>
+</head>
+<body>
+  <h1>🍽️ Meal Plan</h1>
+  <div class="sub">Shared with the family dashboard</div>
+  <div class="toolbar">
+    <input id="prefs" placeholder="Preferences (e.g. no beef, quick meals)" autocomplete="off">
+    <button onclick="suggest()">✨ Suggest</button>
+    <button class="ghost" onclick="save()">Save</button>
+  </div>
+  <div id="days"></div>
+  <div class="footer">Ember — light from within the home</div>
+
+<script>
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+let _meals = {};
+async function load() {
+  const r = await fetch('/api/meals');
+  const d = await r.json();
+  _meals = (d.meals && d.meals.days) || {};
+  render();
+}
+function render() {
+  const box = document.getElementById('days');
+  box.innerHTML = DAYS.map(d =>
+    '<div class="day"><span class="name">' + d + '</span>' +
+    '<input id="meal-' + d + '" value="' + esc(_meals[d] || '') + '" placeholder="—" onchange="setMeal(\'' + d + '\', this.value)">' +
+    '</div>'
+  ).join('');
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function setMeal(day, val) { _meals[day] = val.trim(); }
+async function save() {
+  await fetch('/api/meals', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ days: _meals }) });
+  alert('Saved');
+}
+async function suggest() {
+  const prefs = document.getElementById('prefs').value.trim();
+  const r = await fetch('/api/meals/suggest', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ preferences: prefs }) });
+  const d = await r.json();
+  if (d.ok) {
+    _meals = d.plan;
+    render();
+  } else {
+    alert('Could not suggest: ' + (d.error || 'unknown'));
+  }
+}
+load();
+</script>
+</body>
+</html>

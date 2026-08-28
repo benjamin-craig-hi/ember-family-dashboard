@@ -5,6 +5,7 @@ notes.json
 chores.json
 voice_config.json
 lists.json
+meals.json
 
 # Photos & videos (screensaver) — never commit family media
 photos/
