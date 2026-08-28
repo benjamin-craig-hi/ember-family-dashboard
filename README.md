@@ -15,6 +15,12 @@ Everything runs on-device. The only optional network hops are the LLM (which can
 be offloaded to a GPU workstation on the LAN via `OLLAMA_HOST`), the weather
 (Open-Meteo, no API key), and an optional RSS news feed.
 
+## Screenshots
+
+![Ember Family Dashboard](docs/screenshots/dashboard.png)
+
+![Settings](docs/screenshots/settings.png)
+
 ## Features
 
 ### Family board
