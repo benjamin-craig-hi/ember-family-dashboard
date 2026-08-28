@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Reload the kiosk browser after a deploy.
-# Kills the existing kiosk Chromium and relaunches it in the Wayland session.
-# Safe to run from any context (SSH deploy, git hook, manual); no-ops if the
-# kiosk browser or an active Wayland session isn't present.
+# Stops the existing kiosk Chromium and relaunches it as a systemd --user
+# transient unit so it survives SSH session teardown (a plain `setsid ... &`
+# gets killed when the deploy SSH session closes).
 set -u
 
 command -v chromium-browser >/dev/null 2>&1 || exit 0
@@ -20,13 +20,19 @@ for _ in $(seq 1 15); do
   sleep 1
 done
 
-# Kill the existing kiosk browser (match the kiosk URL specifically).
+# Stop any existing kiosk browser unit, then kill stragglers.
+systemctl --user stop ember-kiosk.service 2>/dev/null
 pkill -f "kiosk http://localhost:8000" 2>/dev/null
 sleep 1
 
-# Relaunch detached so it survives this session.
-setsid chromium-browser --ozone-platform=wayland --noerrdialogs \
+# Relaunch as a transient user unit so it survives this session.
+systemd-run --user --unit=ember-kiosk \
+  --description="Ember kiosk browser" \
+  --setenv=XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+  --setenv=WAYLAND_DISPLAY="${WAYLAND_DISPLAY}" \
+  --setenv=DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS}" \
+  chromium-browser --ozone-platform=wayland --noerrdialogs \
   --disable-session-crashed-bubble --incognito --kiosk \
-  http://localhost:8000 >/dev/null 2>&1 < /dev/null &
+  http://localhost:8000 >/dev/null 2>&1
 
 exit 0
