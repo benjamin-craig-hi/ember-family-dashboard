@@ -70,6 +70,12 @@ def _load_settings():
             pass
     return {}
 
+
+def _save_settings(s):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(os.path.join(DATA_DIR, "settings.json"), "w") as f:
+        json.dump(s, f, indent=2)
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -236,6 +242,28 @@ TOOLS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_settings",
+            "description": "Read the current dashboard settings (assistant name, voice, location, formats, notification toggles)",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_settings",
+            "description": "Change one or more dashboard settings. Valid keys: assistant_name, tts_voice, location, time_format (12h/24h), date_format (weekday/numeric/long), temp_unit (F/C), notify_calendar (true/false), notify_news (true/false), notify_interval (seconds).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "changes": {"type": "object", "description": "Map of setting key to new value"},
+                },
+                "required": ["changes"],
+            },
+        },
+    },
 ]
 
 
@@ -334,6 +362,28 @@ def list_notes():
     return [{"text": n.get("text", "")} for n in notes]
 
 
+# Valid settings keys the voice assistant may change (mirrors main.py DEFAULT_SETTINGS)
+_SETTING_KEYS = {
+    "assistant_name", "tts_voice", "location", "time_format", "date_format",
+    "temp_unit", "notify_calendar", "notify_news", "notify_email", "notify_interval",
+}
+
+
+def get_settings():
+    return _load_settings()
+
+
+def update_settings(changes):
+    s = _load_settings()
+    applied = {}
+    for k, v in (changes or {}).items():
+        if k in _SETTING_KEYS:
+            s[k] = v
+            applied[k] = v
+    _save_settings(s)
+    return applied
+
+
 def run_tool(name, args):
     if name == "add_note":
         add_note(args.get("text", ""))
@@ -359,6 +409,11 @@ def run_tool(name, args):
         return json.dumps(list_chores())
     elif name == "list_notes":
         return json.dumps(list_notes())
+    elif name == "get_settings":
+        return json.dumps(get_settings())
+    elif name == "update_settings":
+        applied = update_settings(args.get("changes", {}))
+        return json.dumps({"updated": applied})
     else:
         print(f"[tool] unknown tool: {name}", flush=True)
         return "unknown"
@@ -544,7 +599,10 @@ def ask_llm(text):
         "appropriate tool to actually save it. When the user asks you to delete, remove, or edit "
         "a note, chore, or calendar event, first use the matching list tool to find the exact "
         "title, then use the matching delete tool with that exact title. For calendar events, resolve relative "
-        f"dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."
+        f"dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year. "
+        "When the user asks you to change a setting (like the assistant name, voice, location, time format, "
+        "temperature unit, or notification toggles), use the update_settings tool. When they ask what a setting "
+        "currently is, use the get_settings tool."
     )
     messages = [
         {"role": "system", "content": system},

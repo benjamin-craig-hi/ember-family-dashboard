@@ -295,6 +295,10 @@
       <input id="set-assistant" placeholder="Ember">
     </div>
     <div class="field">
+      <label>Voice</label>
+      <select id="set-voice"></select>
+    </div>
+    <div class="field">
       <label>Wake word (display only — voice wake word change is coming in Phase 2)</label>
       <input id="set-wakeword" placeholder="Hey Jarvis">
     </div>
@@ -935,6 +939,28 @@ function showFeedItem() {
 }
 
 // ---- Settings modal ----
+const VOICES = [
+  { id: 'af_heart', label: 'Heart (warm female)' },
+  { id: 'af_bella', label: 'Bella (female)' },
+  { id: 'af_nicole', label: 'Nicole (female)' },
+  { id: 'af_sarah', label: 'Sarah (female)' },
+  { id: 'af_sky', label: 'Sky (female)' },
+  { id: 'af_alloy', label: 'Alloy (female)' },
+  { id: 'af_aoede', label: 'Aoede (female)' },
+  { id: 'af_jessica', label: 'Jessica (female)' },
+  { id: 'af_kore', label: 'Kore (female)' },
+  { id: 'af_nova', label: 'Nova (female)' },
+  { id: 'af_river', label: 'River (female)' },
+  { id: 'am_michael', label: 'Michael (male)' },
+  { id: 'am_onyx', label: 'Onyx (male)' },
+  { id: 'am_adam', label: 'Adam (male)' },
+  { id: 'am_echo', label: 'Echo (male)' },
+  { id: 'am_eric', label: 'Eric (male)' },
+  { id: 'am_fenrir', label: 'Fenrir (male)' },
+  { id: 'am_liam', label: 'Liam (male)' },
+  { id: 'am_puck', label: 'Puck (male)' },
+  { id: 'am_santa', label: 'Santa (male)' },
+];
 const NEWS_PRESETS = [
   // News — general
   { label: 'NPR — Top Stories', url: 'https://feeds.npr.org/1001/rss.xml' },
@@ -1020,6 +1046,8 @@ function openSettings() {
   document.getElementById('set-datefmt').value = _settings.date_format || 'weekday';
   document.getElementById('set-tempunit').value = _settings.temp_unit || 'F';
   document.getElementById('set-assistant').value = _settings.assistant_name || 'Ember';
+  const vsel = document.getElementById('set-voice');
+  vsel.innerHTML = VOICES.map(v => '<option value="' + v.id + '"' + ((_settings.tts_voice || 'af_heart') === v.id ? ' selected' : '') + '>' + v.label + '</option>').join('');
   document.getElementById('set-wakeword').value = _settings.wake_word || 'Hey Jarvis';
   document.getElementById('set-notify-cal').checked = !!_settings.notify_calendar;
   document.getElementById('set-notify-news').checked = !!_settings.notify_news;
@@ -1121,6 +1149,7 @@ async function saveSettings() {
     date_format: document.getElementById('set-datefmt').value,
     temp_unit: document.getElementById('set-tempunit').value,
     assistant_name: document.getElementById('set-assistant').value,
+    tts_voice: document.getElementById('set-voice').value,
     wake_word: document.getElementById('set-wakeword').value,
     notify_calendar: document.getElementById('set-notify-cal').checked,
     notify_news: document.getElementById('set-notify-news').checked,
