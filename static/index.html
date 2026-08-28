@@ -372,10 +372,17 @@ let shift = false;
 function showOsk(input) {
   activeInput = input;
   osk.classList.add('show');
+  // Pad the settings box so its bottom (Save button, etc.) scrolls above the keyboard
+  requestAnimationFrame(() => {
+    const h = osk.offsetHeight;
+    document.querySelectorAll('.settings-box').forEach(b => b.style.paddingBottom = (h + 24) + 'px');
+    if (input && input.scrollIntoView) input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
 }
 function hideOsk() {
   osk.classList.remove('show');
   activeInput = null;
+  document.querySelectorAll('.settings-box').forEach(b => b.style.paddingBottom = '');
 }
 
 // Show keyboard when any text input/textarea is focused
