@@ -1,5 +1,7 @@
 import json
 import os
+import urllib.request
+import urllib.parse
 from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -63,6 +65,18 @@ DEFAULT_MILESTONES = [
     {"threshold": 50, "label": "50 stars!", "emoji": "🏆"},
 ]
 
+DEFAULT_SETTINGS = {
+    "location": "Honolulu, HI",
+    "latitude": 21.3069,
+    "longitude": -157.8583,
+    "time_format": "12h",          # "12h" or "24h"
+    "date_format": "weekday",      # "weekday" | "numeric" | "long"
+    "temp_unit": "F",              # "F" or "C"
+    "assistant_name": "Ember",
+    "wake_word": "Hey Jarvis",     # display only; wake-word model change is Phase 2
+    "tts_voice": "af_heart",
+}
+
 
 def _load_family():
     return _load("family.json", DEFAULT_FAMILY)
@@ -74,6 +88,16 @@ def _load_rewards():
 
 def _load_milestones():
     return _load("milestones.json", DEFAULT_MILESTONES)
+
+
+def _load_settings():
+    s = dict(DEFAULT_SETTINGS)
+    s.update(_load("settings.json", {}))
+    return s
+
+
+def _save_settings(s):
+    _save("settings.json", s)
 
 
 class ChatRequest(BaseModel):
@@ -322,6 +346,135 @@ async def claim_reward(index: int, request: Request):
 @app.get("/api/milestones")
 def get_milestones():
     return _load_milestones()
+
+
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+@app.get("/api/settings")
+def get_settings():
+    return _load_settings()
+
+
+@app.put("/api/settings")
+async def put_settings(request: Request):
+    body = await request.json()
+    s = _load_settings()
+    for k in DEFAULT_SETTINGS:
+        if k in body:
+            s[k] = body[k]
+    _save_settings(s)
+    return s
+
+
+# ---------------------------------------------------------------------------
+# Weather (Open-Meteo, no API key required)
+# ---------------------------------------------------------------------------
+def _geocode(query):
+    url = "https://geocoding-api.open-meteo.com/v1/search?count=1&format=json&name=" + urllib.parse.quote(query)
+    with urllib.request.urlopen(url, timeout=8) as r:
+        data = json.loads(r.read().decode())
+    res = (data.get("results") or [None])[0]
+    if not res:
+        return None
+    return {
+        "name": res.get("name"),
+        "admin1": res.get("admin1"),
+        "country": res.get("country"),
+        "latitude": res.get("latitude"),
+        "longitude": res.get("longitude"),
+    }
+
+
+@app.get("/api/weather")
+def get_weather():
+    s = _load_settings()
+    lat = s.get("latitude")
+    lon = s.get("longitude")
+    unit = s.get("temp_unit", "F")
+    temp_unit = "fahrenheit" if unit == "F" else "celsius"
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        "&current=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature"
+        f"&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&temperature_unit={temp_unit}"
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=8) as r:
+            data = json.loads(r.read().decode())
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    cur = data.get("current", {})
+    daily = data.get("daily", {})
+    return {
+        "ok": True,
+        "location": s.get("location", ""),
+        "temp": cur.get("temperature_2m"),
+        "apparent": cur.get("apparent_temperature"),
+        "humidity": cur.get("relative_humidity_2m"),
+        "code": cur.get("weather_code"),
+        "unit": unit,
+        "today_high": (daily.get("temperature_2m_max") or [None])[0],
+        "today_low": (daily.get("temperature_2m_min") or [None])[0],
+    }
+
+
+@app.post("/api/geocode")
+async def geocode(request: Request):
+    body = await request.json()
+    q = body.get("query", "")
+    if not q:
+        return {"ok": False, "error": "empty query"}
+    try:
+        res = _geocode(q)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    if not res:
+        return {"ok": False, "error": "location not found"}
+    return {"ok": True, "result": res}
+
+
+# ---------------------------------------------------------------------------
+# Family member management
+# ---------------------------------------------------------------------------
+@app.post("/api/family")
+async def add_member(request: Request):
+    body = await request.json()
+    family = _load_family()
+    family.append({
+        "name": body.get("name", "").strip(),
+        "color": body.get("color", "#ff7a1a"),
+        "stars": int(body.get("stars", 0) or 0),
+    })
+    _save("family.json", family)
+    return {"ok": True}
+
+
+@app.put("/api/family/{index}")
+async def update_member(index: int, request: Request):
+    body = await request.json()
+    family = _load_family()
+    if not (0 <= index < len(family)):
+        return {"ok": False, "error": "index out of range"}
+    m = family[index]
+    if "name" in body:
+        m["name"] = body["name"].strip()
+    if "color" in body:
+        m["color"] = body["color"]
+    if "stars" in body:
+        m["stars"] = int(body["stars"] or 0)
+    _save("family.json", family)
+    return {"ok": True}
+
+
+@app.delete("/api/family/{index}")
+async def delete_member(index: int):
+    family = _load_family()
+    if not (0 <= index < len(family)):
+        return {"ok": False, "error": "index out of range"}
+    family.pop(index)
+    _save("family.json", family)
+    return {"ok": True}
 
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"), html=True), name="static")

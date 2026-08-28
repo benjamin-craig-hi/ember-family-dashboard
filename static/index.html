@@ -14,6 +14,18 @@
   header .title { color:var(--text); }
   header .tagline { font-size:1.05rem; font-weight:400; color:#eab676; font-style:italic; font-family:Georgia,'Times New Roman',serif; letter-spacing:0.01em; text-shadow:0 0 14px rgba(255,160,60,0.35), 0 0 2px rgba(255,180,90,0.25); }
 
+  /* ---- Top bar: weather + clock + settings ---- */
+  .topbar { display:flex; align-items:center; gap:16px; padding:10px 24px; border-bottom:1px solid #262a33; }
+  .weather { display:flex; align-items:center; gap:10px; }
+  .weather .wicon { font-size:1.6rem; }
+  .weather .wtemp { font-size:1.3rem; font-weight:700; }
+  .weather .wmeta { color:var(--muted); font-size:.85rem; line-height:1.25; }
+  .clock { margin-left:auto; text-align:right; }
+  .clock .ctime { font-size:1.5rem; font-weight:700; color:var(--text); }
+  .clock .cdate { color:var(--muted); font-size:.9rem; }
+  .gear { background:#22262f; color:var(--text); border:1px solid #333a46; border-radius:8px; width:42px; height:42px; font-size:1.4rem; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .gear:active { background:#2a2f3a; }
+
   /* Calendar takes ~3/4; chores + notes share the right ~1/4 */
   main { flex:1; display:grid; grid-template-columns:3fr 1fr; gap:16px; padding:16px; overflow:hidden; min-height:0; }
 
@@ -48,6 +60,34 @@
   .picker-member .nm { font-weight:600; flex:1; }
   .picker-member .bal { color:var(--muted); font-size:.85rem; }
   .picker-cancel { margin-top:12px; width:100%; background:#2a2f3a; color:var(--text); border:1px solid #333a46; border-radius:8px; padding:10px; cursor:pointer; font-weight:600; }
+
+  /* ---- Settings modal ---- */
+  #settings { position:fixed; inset:0; z-index:3000; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; }
+  #settings.show { display:flex; }
+  .settings-box { background:var(--panel); border:1px solid #333a46; border-radius:14px; padding:24px; width:min(560px, 92vw); max-height:88vh; overflow-y:auto; }
+  .settings-box h2 { color:var(--accent); margin-bottom:16px; font-size:1.3rem; }
+  .settings-box h3 { color:var(--text); margin:18px 0 8px; font-size:1rem; border-top:1px solid #262a33; padding-top:14px; }
+  .settings-box h3:first-of-type { border-top:none; padding-top:0; margin-top:0; }
+  .field { margin-bottom:12px; }
+  .field label { display:block; color:var(--muted); font-size:.85rem; margin-bottom:4px; }
+  .field input, .field select { width:100%; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:10px; font-size:1rem; }
+  .field-row { display:flex; gap:10px; }
+  .field-row .field { flex:1; }
+  .member-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .member-row input[type=text] { flex:1; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:8px; font-size:.95rem; }
+  .member-row input[type=color] { width:40px; height:36px; border:none; background:none; cursor:pointer; padding:0; }
+  .member-row .del { background:#3a2a2a; color:#ff8a8a; border:1px solid #5a3a3a; border-radius:8px; width:36px; height:36px; cursor:pointer; font-size:1rem; }
+  .btn { background:var(--accent); color:#111; border:none; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; }
+  .btn.ghost { background:#2a2f3a; color:var(--text); border:1px solid #333a46; }
+  .settings-actions { display:flex; gap:10px; margin-top:20px; justify-content:flex-end; }
+
+  /* ---- Milestone celebration ---- */
+  #celebrate { position:fixed; inset:0; z-index:4000; display:none; align-items:center; justify-content:center; pointer-events:none; }
+  #celebrate.show { display:flex; }
+  .celebrate-box { text-align:center; animation:pop .5s ease; }
+  .celebrate-box .big { font-size:5rem; }
+  .celebrate-box .msg { font-size:1.8rem; font-weight:700; color:var(--accent); margin-top:8px; text-shadow:0 0 20px rgba(255,160,60,.5); }
+  @keyframes pop { 0% { transform:scale(.3); opacity:0; } 70% { transform:scale(1.15); } 100% { transform:scale(1); opacity:1; } }
   .add { display:flex; gap:8px; margin-top:10px; }
   .add input { flex:1; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:10px; font-size:1rem; }
   .add button { background:var(--accent); color:#111; border:none; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; }
@@ -105,6 +145,18 @@
   <span class="title">Family Dashboard</span>
   <span class="tagline">light from within the home</span>
 </header>
+<div class="topbar">
+  <div class="weather" id="weather">
+    <span class="wicon" id="w-icon">—</span>
+    <span class="wtemp" id="w-temp">—</span>
+    <span class="wmeta" id="w-meta">Loading weather…</span>
+  </div>
+  <div class="clock">
+    <div class="ctime" id="clock-time">—:—</div>
+    <div class="cdate" id="clock-date">—</div>
+  </div>
+  <button class="gear" onclick="openSettings()" title="Settings">⚙️</button>
+</div>
 <main>
   <div class="cal-pane">
     <div class="cal-toolbar">
@@ -151,6 +203,72 @@
     <h3>Who is claiming this?</h3>
     <div class="picker-members" id="picker-members"></div>
     <button class="picker-cancel" onclick="closePicker()">Cancel</button>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settings">
+  <div class="settings-box">
+    <h2>Settings</h2>
+
+    <h3>Family members</h3>
+    <div id="member-list"></div>
+    <button class="btn ghost" onclick="addMemberRow()">+ Add member</button>
+
+    <h3>Location &amp; weather</h3>
+    <div class="field">
+      <label>Location (city, state)</label>
+      <input id="set-location" placeholder="Honolulu, HI">
+    </div>
+
+    <h3>Date &amp; time</h3>
+    <div class="field-row">
+      <div class="field">
+        <label>Time format</label>
+        <select id="set-timefmt">
+          <option value="12h">12-hour (3:45 PM)</option>
+          <option value="24h">24-hour (15:45)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Date format</label>
+        <select id="set-datefmt">
+          <option value="weekday">Weekday (Thursday, Aug 27)</option>
+          <option value="numeric">Numeric (8/27/2026)</option>
+          <option value="long">Long (August 27, 2026)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Temperature unit</label>
+      <select id="set-tempunit">
+        <option value="F">Fahrenheit (°F)</option>
+        <option value="C">Celsius (°C)</option>
+      </select>
+    </div>
+
+    <h3>Assistant</h3>
+    <div class="field">
+      <label>Assistant name</label>
+      <input id="set-assistant" placeholder="Ember">
+    </div>
+    <div class="field">
+      <label>Wake word (display only — voice wake word change is coming in Phase 2)</label>
+      <input id="set-wakeword" placeholder="Hey Jarvis">
+    </div>
+
+    <div class="settings-actions">
+      <button class="btn ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Milestone celebration -->
+<div id="celebrate">
+  <div class="celebrate-box">
+    <div class="big" id="celebrate-emoji">🎉</div>
+    <div class="msg" id="celebrate-msg">Milestone reached!</div>
   </div>
 </div>
 
@@ -403,6 +521,7 @@ async function loadFamily() {
   const r = await fetch('/api/family');
   const d = await r.json();
   _family = d;
+  checkMilestones();
 }
 async function loadRewards() {
   const [fam, rew] = await Promise.all([
@@ -485,8 +604,182 @@ async function ask() {
 }
 function talk() { document.getElementById('reply').textContent = 'Voice assistant is listening for the wake word.'; }
 
+// ---- Top bar: clock + weather + settings ----
+let _settings = {};
+let _milestones = [];
+let _prevStars = {};   // name -> last known star count (for milestone detection)
+
+function fmtTime(d) {
+  if (_settings.time_format === '24h') {
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+function fmtDate(d) {
+  const f = _settings.date_format || 'weekday';
+  if (f === 'numeric') return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+  if (f === 'long') return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+}
+function tickClock() {
+  const d = new Date();
+  document.getElementById('clock-time').textContent = fmtTime(d);
+  document.getElementById('clock-date').textContent = fmtDate(d);
+}
+
+const WMO = {
+  0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 48: '🌫️',
+  51: '🌦️', 53: '🌦️', 55: '🌧️', 56: '🌧️', 57: '🌧️',
+  61: '🌧️', 63: '🌧️', 65: '🌧️', 66: '🌧️', 67: '🌧️',
+  71: '🌨️', 73: '🌨️', 75: '🌨️', 77: '🌨️',
+  80: '🌦️', 81: '🌧️', 82: '🌧️', 85: '🌨️', 86: '🌨️',
+  95: '⛈️', 96: '⛈️', 99: '⛈️',
+};
+function wmoIcon(code) { return WMO[code] || '🌡️'; }
+
+async function loadWeather() {
+  try {
+    const r = await fetch('/api/weather');
+    const d = await r.json();
+    if (!d.ok) { document.getElementById('w-meta').textContent = 'Weather unavailable'; return; }
+    document.getElementById('w-icon').textContent = wmoIcon(d.code);
+    document.getElementById('w-temp').textContent = Math.round(d.temp) + '°' + d.unit;
+    document.getElementById('w-meta').textContent =
+      d.location + ' · H ' + Math.round(d.today_high) + '° / L ' + Math.round(d.today_low) + '°';
+  } catch (e) {
+    document.getElementById('w-meta').textContent = 'Weather unavailable';
+  }
+}
+
+async function loadSettings() {
+  const r = await fetch('/api/settings');
+  _settings = await r.json();
+  tickClock();
+}
+
+// ---- Settings modal ----
+function openSettings() {
+  document.getElementById('set-location').value = _settings.location || '';
+  document.getElementById('set-timefmt').value = _settings.time_format || '12h';
+  document.getElementById('set-datefmt').value = _settings.date_format || 'weekday';
+  document.getElementById('set-tempunit').value = _settings.temp_unit || 'F';
+  document.getElementById('set-assistant').value = _settings.assistant_name || 'Ember';
+  document.getElementById('set-wakeword').value = _settings.wake_word || 'Hey Jarvis';
+  renderMemberRows();
+  document.getElementById('settings').classList.add('show');
+}
+function closeSettings() { document.getElementById('settings').classList.remove('show'); }
+
+function renderMemberRows() {
+  const box = document.getElementById('member-list');
+  box.innerHTML = _family.map((m, i) =>
+    '<div class="member-row">' +
+    '<input type="color" value="' + (m.color || '#ff7a1a') + '" onchange="memberColor(' + i + ', this.value)">' +
+    '<input type="text" value="' + esc(m.name) + '" onchange="memberName(' + i + ', this.value)">' +
+    '<button class="del" onclick="memberDelete(' + i + ')">✕</button>' +
+    '</div>'
+  ).join('');
+}
+function addMemberRow() {
+  const box = document.getElementById('member-list');
+  const i = _family.length;
+  box.insertAdjacentHTML('beforeend',
+    '<div class="member-row">' +
+    '<input type="color" value="#ff7a1a" onchange="memberColor(' + i + ', this.value)">' +
+    '<input type="text" placeholder="New member" onchange="memberName(' + i + ', this.value)">' +
+    '<button class="del" onclick="memberDelete(' + i + ')">✕</button>' +
+    '</div>'
+  );
+}
+async function memberName(i, val) {
+  if (i < _family.length) {
+    await fetch('/api/family/' + i, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: val }) });
+  } else {
+    await fetch('/api/family', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: val, color: '#ff7a1a' }) });
+  }
+  await loadFamily();
+  renderMemberRows();
+}
+async function memberColor(i, val) {
+  if (i < _family.length) {
+    await fetch('/api/family/' + i, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ color: val }) });
+  }
+  await loadFamily();
+}
+async function memberDelete(i) {
+  if (i < _family.length) {
+    await fetch('/api/family/' + i, { method: 'DELETE' });
+    await loadFamily();
+    renderMemberRows();
+  } else {
+    // remove an unsaved new row
+    document.querySelectorAll('#member-list .member-row')[i].remove();
+  }
+}
+
+async function saveSettings() {
+  const body = {
+    location: document.getElementById('set-location').value,
+    time_format: document.getElementById('set-timefmt').value,
+    date_format: document.getElementById('set-datefmt').value,
+    temp_unit: document.getElementById('set-tempunit').value,
+    assistant_name: document.getElementById('set-assistant').value,
+    wake_word: document.getElementById('set-wakeword').value,
+  };
+  // geocode the location to lat/lon
+  try {
+    const g = await fetch('/api/geocode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: body.location }) });
+    const gd = await g.json();
+    if (gd.ok) {
+      body.latitude = gd.result.latitude;
+      body.longitude = gd.result.longitude;
+    }
+  } catch (e) {}
+  await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  closeSettings();
+  await loadSettings();
+  loadWeather();
+}
+
+// ---- Milestone celebration ----
+async function loadMilestones() {
+  const r = await fetch('/api/milestones');
+  _milestones = await r.json();
+}
+function checkMilestones() {
+  _family.forEach(m => {
+    const prev = _prevStars[m.name];
+    const cur = m.stars;
+    if (prev === undefined) { _prevStars[m.name] = cur; return; }
+    if (cur > prev) {
+      // find the highest milestone crossed
+      let hit = null;
+      _milestones.forEach(ms => {
+        if (prev < ms.threshold && cur >= ms.threshold) {
+          if (!hit || ms.threshold > hit.threshold) hit = ms;
+        }
+      });
+      if (hit) celebrate(hit.emoji, m.name + ' — ' + hit.label);
+    }
+    _prevStars[m.name] = cur;
+  });
+}
+function celebrate(emoji, msg) {
+  document.getElementById('celebrate-emoji').textContent = emoji;
+  document.getElementById('celebrate-msg').textContent = msg;
+  const el = document.getElementById('celebrate');
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
 initCalView();
+loadSettings();
+loadMilestones();
 refreshAll();
+tickClock();
+setInterval(tickClock, 1000);
+loadWeather();
+setInterval(loadWeather, 600000);   // refresh weather every 10 min
 // Auto-refresh: poll for changes so entries added by the agent (chat or voice)
 // appear without a manual F5. Diff-aware loaders prevent flicker on no-change polls.
 setInterval(refreshAll, 3000);

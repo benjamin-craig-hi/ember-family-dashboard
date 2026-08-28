@@ -56,6 +56,19 @@ OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 ASSISTANT_NAME = "Ember"
 
 CONFIG_PATH = os.path.join(BASE_DIR, "voice_config.json")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+
+def _load_settings():
+    """Read the shared settings.json (written by the dashboard UI)."""
+    p = os.path.join(DATA_DIR, "settings.json")
+    if os.path.exists(p):
+        try:
+            with open(p) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
 
 # ---------------------------------------------------------------------------
 # Config
@@ -89,8 +102,6 @@ def load_config():
 # ---------------------------------------------------------------------------
 # Dashboard data (notes / chores / calendar) — shared with main.py
 # ---------------------------------------------------------------------------
-DATA_DIR = os.path.join(BASE_DIR, "data")
-
 DEFAULT_FAMILY = [
     {"name": "Mom", "color": "#ff7a1a", "stars": 0},
     {"name": "Dad", "color": "#4a9eff", "stars": 0},
@@ -388,9 +399,10 @@ def _get_client():
 
 def ask_llm(text):
     today = datetime.now().strftime("%A, %B %d, %Y")
+    name = _load_settings().get("assistant_name") or ASSISTANT_NAME
     resp = _get_client().chat(model=MODEL, messages=[
         {"role": "system", "content": (
-            f"Today is {today}. You are {ASSISTANT_NAME}, the warm, self-hosted family assistant — the light from within the home. "
+            f"Today is {today}. You are {name}, the warm, self-hosted family assistant — the light from within the home. "
             "You help the family stay organized and connected. "
             "Answer in one short sentence, in plain spoken language. No emoji, no lists. "
             "When the user asks you to add a note, chore, or calendar event, use the "
@@ -472,7 +484,8 @@ def main():
     print("[init] ready. Listening for wake word...", flush=True)
 
     if cfg.get("announce_ready", True):
-        speak(f"{ASSISTANT_NAME} is ready.")
+        name = _load_settings().get("assistant_name") or ASSISTANT_NAME
+        speak(f"{name} is ready.")
 
     # One continuous input stream for the whole session (no per-chunk
     # stream open/close, which would create gaps that break wake-word
@@ -593,7 +606,8 @@ def main():
                 print(f"[llm] {reply!r}", flush=True)
 
                 # 5. TTS
-                speak(reply, cfg["tts_voice"])
+                voice = _load_settings().get("tts_voice") or cfg["tts_voice"]
+                speak(reply, voice)
                 last_response = time.time()
 
         except KeyboardInterrupt:
