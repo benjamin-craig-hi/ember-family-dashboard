@@ -291,7 +291,17 @@
       <label class="check"><input type="checkbox" id="set-notify-news"> Show news feed (RSS)</label>
     </div>
     <div class="field">
-      <label>News feed URL (RSS/Atom)</label>
+      <label>News source</label>
+      <select id="set-news-preset" onchange="newsPresetChange()">
+        <option value="npr">NPR — Top Stories</option>
+        <option value="bbc">BBC — World News</option>
+        <option value="verge">The Verge — Tech</option>
+        <option value="ars">Ars Technica — Tech</option>
+        <option value="custom">Custom URL…</option>
+      </select>
+    </div>
+    <div class="field" id="news-url-field" style="display:none">
+      <label>Custom news feed URL (RSS/Atom)</label>
       <input id="set-news-url" placeholder="https://example.com/feed.xml">
     </div>
     <div class="field">
@@ -741,6 +751,20 @@ function showFeedItem() {
 }
 
 // ---- Settings modal ----
+const NEWS_PRESETS = {
+  npr: 'https://feeds.npr.org/1001/rss.xml',
+  bbc: 'http://feeds.bbci.co.uk/news/world/rss.xml',
+  verge: 'https://www.theverge.com/rss/index.xml',
+  ars: 'https://feeds.arstechnica.com/arstechnica/index',
+};
+function newsPresetForUrl(url) {
+  for (const k in NEWS_PRESETS) if (NEWS_PRESETS[k] === url) return k;
+  return 'custom';
+}
+function newsPresetChange() {
+  const v = document.getElementById('set-news-preset').value;
+  document.getElementById('news-url-field').style.display = (v === 'custom') ? '' : 'none';
+}
 function openSettings() {
   document.getElementById('set-location').value = _settings.location || '';
   document.getElementById('set-timefmt').value = _settings.time_format || '12h';
@@ -751,7 +775,10 @@ function openSettings() {
   document.getElementById('set-notify-cal').checked = !!_settings.notify_calendar;
   document.getElementById('set-notify-news').checked = !!_settings.notify_news;
   document.getElementById('set-notify-email').checked = !!_settings.notify_email;
-  document.getElementById('set-news-url').value = _settings.news_feed_url || '';
+  const url = _settings.news_feed_url || NEWS_PRESETS.npr;
+  document.getElementById('set-news-preset').value = newsPresetForUrl(url);
+  document.getElementById('set-news-url').value = url;
+  newsPresetChange();
   document.getElementById('set-notify-interval').value = _settings.notify_interval || 10;
   renderMemberRows();
   renderCalConns();
@@ -851,7 +878,10 @@ async function saveSettings() {
     notify_calendar: document.getElementById('set-notify-cal').checked,
     notify_news: document.getElementById('set-notify-news').checked,
     notify_email: document.getElementById('set-notify-email').checked,
-    news_feed_url: document.getElementById('set-news-url').value,
+    news_feed_url: (function () {
+      const preset = document.getElementById('set-news-preset').value;
+      return preset === 'custom' ? document.getElementById('set-news-url').value : NEWS_PRESETS[preset];
+    })(),
     notify_interval: parseInt(document.getElementById('set-notify-interval').value, 10) || 10,
     calendar_connections: _settings.calendar_connections || [],
   };

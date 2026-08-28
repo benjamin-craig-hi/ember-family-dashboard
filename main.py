@@ -80,7 +80,7 @@ DEFAULT_SETTINGS = {
     "notify_calendar": True,
     "notify_news": False,
     "notify_email": False,
-    "news_feed_url": "",
+    "news_feed_url": "https://feeds.npr.org/1001/rss.xml",  # NPR Top Stories (default)
     "notify_interval": 10,         # seconds between rotating feed items
     # Calendar connections (configured now; sync is a later phase)
     "calendar_connections": [],    # [{provider, url}]
