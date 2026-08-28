@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Jarvis — local voice assistant for the family dashboard.
+Ember — local voice assistant for the family dashboard.
 
 Pipeline: wake word (openWakeWord) -> record speech (Silero VAD) ->
 STT (Moonshine ONNX) -> LLM (Ollama) -> TTS (Kokoro).
@@ -53,7 +53,7 @@ _load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b-q8_0")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-ASSISTANT_NAME = "Jarvis"
+ASSISTANT_NAME = "Ember"
 
 CONFIG_PATH = os.path.join(BASE_DIR, "voice_config.json")
 
@@ -390,7 +390,8 @@ def ask_llm(text):
     today = datetime.now().strftime("%A, %B %d, %Y")
     resp = _get_client().chat(model=MODEL, messages=[
         {"role": "system", "content": (
-            f"Today is {today}. You are {ASSISTANT_NAME}, a warm, helpful family dashboard assistant. "
+            f"Today is {today}. You are {ASSISTANT_NAME}, the warm, self-hosted family assistant — the light from within the home. "
+            "You help the family stay organized and connected. "
             "Answer in one short sentence, in plain spoken language. No emoji, no lists. "
             "When the user asks you to add a note, chore, or calendar event, use the "
             "appropriate tool to actually save it. For calendar events, resolve relative "

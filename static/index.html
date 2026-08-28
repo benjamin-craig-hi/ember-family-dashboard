@@ -3,14 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Family Dashboard</title>
+<title>Ember Family Dashboard</title>
 <style>
   :root { --bg:#0f1115; --panel:#1a1d24; --accent:#ff7a1a; --text:#e8e8e8; --muted:#8a8f98; }
   * { box-sizing:border-box; margin:0; padding:0; }
   html, body { height:100%; }
   body { background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
-  header { padding:18px 24px; font-size:1.6rem; font-weight:700; border-bottom:1px solid #262a33; }
-  header span { color:var(--accent); }
+  header { padding:18px 24px; font-size:1.6rem; font-weight:700; border-bottom:1px solid #262a33; display:flex; align-items:baseline; gap:12px; }
+  header .brand { color:var(--accent); }
+  header .title { color:var(--text); }
+  header .tagline { font-size:1rem; font-weight:400; color:var(--muted); font-style:italic; }
 
   /* Calendar takes ~3/4; chores + notes share the right ~1/4 */
   main { flex:1; display:grid; grid-template-columns:3fr 1fr; gap:16px; padding:16px; overflow:hidden; min-height:0; }
@@ -98,7 +100,11 @@
 </style>
 </head>
 <body>
-<header>Family <span>Dashboard</span></header>
+<header>
+  <span class="brand">Ember</span>
+  <span class="title">Family Dashboard</span>
+  <span class="tagline">light from within the home</span>
+</header>
 <main>
   <div class="cal-pane">
     <div class="cal-toolbar">
@@ -135,7 +141,7 @@
 </main>
 <div id="reply"></div>
 <footer>
-  <div id="chatbox"><input id="chat-in" placeholder="Ask the assistant..."><button onclick="ask()">Send</button></div>
+  <div id="chatbox"><input id="chat-in" placeholder="Ask Ember..."><button onclick="ask()">Send</button></div>
   <button id="talk" onclick="talk()">🎤 Talk</button>
 </footer>
 
