@@ -203,7 +203,7 @@ In progress / TODO:
 - `static/meals.html` — meal planning page
 - `requirements.txt` — pinned Python dependencies
 - `.env.example` — environment template (`OLLAMA_HOST`, `OLLAMA_MODEL`)
-- `jarvis-voice.service` — systemd **user** service for the voice loop
+- `ember-voice.service` — systemd **user** service for the voice loop
 - `record_wakeword.py` — records clips to train a custom wake word (optional)
 - `scripts/reload-kiosk.sh` — restarts the kiosk browser (used by the git hook)
 - `hooks/post-merge` — git hook that auto-reloads the kiosk browser on `git pull`
@@ -287,11 +287,11 @@ python voice_assistant.py
 
 ```bash
 mkdir -p ~/.config/systemd/user
-cp jarvis-voice.service ~/.config/systemd/user/
+cp ember-voice.service ~/.config/systemd/user/
 # edit the paths in the service file to match your install
 loginctl enable-linger "$USER"
 systemctl --user daemon-reload
-systemctl --user enable --now jarvis-voice.service
+systemctl --user enable --now ember-voice.service
 ```
 
 ## Notes

@@ -155,7 +155,7 @@ stars → stars accumulate toward milestones → a reward store lets kids
   in Chromium, no perf concern.
 - Animated motivational graphics on chore completion.
 - On-screen **voice + wake-name selector** (Kokoro voices; pick your own
-  assistant name instead of being locked to "Jarvis").
+  assistant name instead of being locked to "Ember").
 - Reuse the existing chime/TTS pipeline; add a "celebration" voice line.
 
 ### Phase 3 — Photo & Video Screensaver
@@ -196,7 +196,7 @@ stars → stars accumulate toward milestones → a reward store lets kids
    auto-rotate investment, no resolution scaling beyond responsive CSS.
 2. **Voice:** drop the Disney/Elsa idea entirely. Instead, add an on-screen
    option to **select different TTS voices and wake names** (so a family
-   isn't locked to "Jarvis").
+   isn't locked to "Ember").
 3. **Photo sync:** self-hosted (Syncthing) — confirmed.
 4. **Calendar providers:** support all of them — Google, iCloud, Outlook,
    CalDAV, and iCal public feeds.

@@ -92,7 +92,7 @@ DEFAULTS = {
     "stt_model": "moonshine/tiny",
     "max_speech_seconds": 15.0,
     "silence_seconds": 1.5,
-    "custom_verifier": None,  # path to trained .joblib verifier (unused for Jarvis)
+    "custom_verifier": None,  # path to trained .joblib verifier (unused for Ember)
     "custom_verifier_threshold": 0.5,
     "announce_ready": True,
 }
@@ -774,7 +774,7 @@ def chime():
 
 
 def chime_done():
-    """Play a short descending two-tone so the user knows Jarvis finished
+    """Play a short descending two-tone so the user knows Ember finished
     listening and is now thinking. Distinct from the wake chime (which
     ascends)."""
     try:
@@ -1007,7 +1007,7 @@ def main():
             score = prediction.get(wake_key, 0.0)
 
             # Debounce: require N consecutive frames above threshold so a
-            # single transient spike (or the word "Jarvis" in conversation)
+            # single transient spike (or the word "Ember" in conversation)
             # doesn't trigger a response.
             if score >= cfg["wake_threshold"]:
                 wake_frames += 1
@@ -1021,7 +1021,7 @@ def main():
                 print(f"[wake] detected ({score:.2f})", flush=True)
 
                 # Acknowledge the wake word with a short chime so the user
-                # knows Jarvis is listening, then record the command.
+                # knows Ember is listening, then record the command.
                 chime()
                 time.sleep(0.25)  # let the chime tail clear before recording
 
@@ -1079,7 +1079,7 @@ def main():
                     continue
 
                 # Done listening — acknowledge with a descending chime so the
-                # user knows Jarvis captured the command and is now thinking.
+                # user knows Ember captured the command and is now thinking.
                 chime_done()
 
                 # 3. STT

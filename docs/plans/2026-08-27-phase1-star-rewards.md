@@ -586,14 +586,14 @@ git push https://<token>@github.com/benjamin-craig-hi/family-dashboard.git main
 ```bash
 ssh dashboard@10.0.0.5 'cd ~/dashboard-app && git pull && \
   sudo systemctl restart dashboard-backend.service && \
-  systemctl --user restart jarvis-voice.service'
+  systemctl --user restart ember-voice.service'
 ```
 
 **Step 3: Verify**
 
 ```bash
 ssh dashboard@10.0.0.5 'systemctl is-active dashboard-backend.service; \
-  systemctl --user is-active jarvis-voice.service; \
+  systemctl --user is-active ember-voice.service; \
   curl -s http://localhost:8000/api/family; \
   curl -s http://localhost:8000/api/rewards'
 ```

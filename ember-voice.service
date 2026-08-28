@@ -1,5 +1,5 @@
 [Unit]
-Description=Jarvis voice assistant (wake word -> STT -> LLM -> TTS)
+Description=Ember voice assistant (wake word -> STT -> LLM -> TTS)
 After=default.target
 
 [Service]
