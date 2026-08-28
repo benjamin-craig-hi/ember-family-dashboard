@@ -80,8 +80,8 @@ DEFAULTS = {
     "cooldown_seconds": 5.0,               # ignore wake word for N sec after a response
     "tts_voice": "af_heart",
     "stt_model": "moonshine/tiny",
-    "max_speech_seconds": 8.0,
-    "silence_seconds": 1.0,
+    "max_speech_seconds": 15.0,
+    "silence_seconds": 1.5,
     "custom_verifier": None,  # path to trained .joblib verifier (unused for Jarvis)
     "custom_verifier_threshold": 0.5,
     "announce_ready": True,

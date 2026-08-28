@@ -283,6 +283,29 @@ async def set_chore_done(index: int, request: Request):
     return {"ok": True}
 
 
+@app.put("/api/chores/{index}")
+async def update_chore(index: int, request: Request):
+    body = await request.json()
+    chores = _load("chores.json", [])
+    if not (0 <= index < len(chores)):
+        return {"ok": False, "error": "index out of range"}
+    for k in ("title", "day", "stars", "assignee", "done"):
+        if k in body:
+            chores[index][k] = body[k]
+    _save("chores.json", chores)
+    return {"ok": True}
+
+
+@app.delete("/api/chores/{index}")
+async def delete_chore(index: int):
+    chores = _load("chores.json", [])
+    if not (0 <= index < len(chores)):
+        return {"ok": False, "error": "index out of range"}
+    chores.pop(index)
+    _save("chores.json", chores)
+    return {"ok": True}
+
+
 @app.get("/api/notes")
 def get_notes():
     return _load("notes.json", [])
@@ -306,7 +329,31 @@ def get_calendar():
 async def add_calendar_event(request: Request):
     body = await request.json()
     events = _load("calendar.json", [])
+    body.setdefault("color", "")
     events.append(body)
+    _save("calendar.json", events)
+    return {"ok": True}
+
+
+@app.put("/api/calendar/{index}")
+async def update_calendar_event(index: int, request: Request):
+    body = await request.json()
+    events = _load("calendar.json", [])
+    if not (0 <= index < len(events)):
+        return {"ok": False, "error": "index out of range"}
+    for k in ("title", "day", "time", "color"):
+        if k in body:
+            events[index][k] = body[k]
+    _save("calendar.json", events)
+    return {"ok": True}
+
+
+@app.delete("/api/calendar/{index}")
+async def delete_calendar_event(index: int):
+    events = _load("calendar.json", [])
+    if not (0 <= index < len(events)):
+        return {"ok": False, "error": "index out of range"}
+    events.pop(index)
     _save("calendar.json", events)
     return {"ok": True}
 

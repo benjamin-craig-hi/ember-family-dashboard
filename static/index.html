@@ -97,6 +97,21 @@
   .btn.ghost { background:#2a2f3a; color:var(--text); border:1px solid #333a46; }
   .settings-actions { display:flex; gap:10px; margin-top:20px; justify-content:flex-end; }
 
+  /* ---- Edit modal (chores + calendar events) ---- */
+  #edit-modal { position:fixed; inset:0; z-index:3500; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; }
+  #edit-modal.show { display:flex; }
+  .edit-box { background:var(--panel); border:1px solid #333a46; border-radius:14px; padding:24px; width:min(480px, 92vw); max-height:88vh; overflow-y:auto; }
+  .edit-box h2 { color:var(--accent); margin-bottom:16px; font-size:1.3rem; }
+  .edit-box .field { margin-bottom:12px; }
+  .edit-box .field label { display:block; color:var(--muted); font-size:.85rem; margin-bottom:4px; }
+  .edit-box .field input { width:100%; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:10px; font-size:1rem; }
+  .swatches { display:flex; flex-wrap:wrap; gap:8px; }
+  .swatch { width:34px; height:34px; border-radius:8px; border:2px solid transparent; cursor:pointer; flex:none; }
+  .swatch.sel { border-color:#fff; }
+  .swatch.none { background:#22262f; border:2px dashed #333a46; }
+  .swatch.none.sel { border-color:#fff; }
+  .edit-box .del-btn { background:#3a2a2a; color:#ff8a8a; border:1px solid #5a3a3a; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; }
+
   /* ---- Milestone celebration ---- */
   #celebrate { position:fixed; inset:0; z-index:4000; display:none; align-items:center; justify-content:center; pointer-events:none; }
   #celebrate.show { display:flex; }
@@ -121,7 +136,8 @@
   .cal-cell.today { outline:2px solid var(--accent); }
   .cal-num { font-weight:700; color:var(--muted); font-size:.85rem; margin-bottom:3px; }
   .cal-cell.today .cal-num { color:var(--accent); }
-  .cal-ev { background:#2a2f3a; border-radius:4px; padding:2px 5px; font-size:.72rem; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cal-ev { background:#2a2f3a; border-radius:4px; padding:2px 5px; font-size:.72rem; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; border-left:3px solid transparent; }
+  .cal-ev:hover { filter:brightness(1.2); }
   .cal-ev-time { color:var(--accent); font-weight:600; }
   .cal-upcoming-wrap { margin-top:10px; border-top:1px solid #262a33; padding-top:10px; }
   .cal-upcoming-wrap h3 { font-size:.9rem; color:var(--muted); margin-bottom:6px; }
@@ -314,6 +330,42 @@
   </div>
 </div>
 
+<!-- Edit modal (chores + calendar events) -->
+<div id="edit-modal">
+  <div class="edit-box">
+    <h2 id="edit-title">Edit</h2>
+    <div class="field">
+      <label>Title</label>
+      <input id="edit-field-title" placeholder="Title">
+    </div>
+    <div class="field" id="edit-field-day-wrap">
+      <label>Day</label>
+      <input id="edit-field-day" placeholder="e.g. today, tomorrow, Friday, 2026-09-01">
+    </div>
+    <div class="field" id="edit-field-time-wrap">
+      <label>Time</label>
+      <input id="edit-field-time" placeholder="e.g. 3pm">
+    </div>
+    <div class="field" id="edit-field-stars-wrap">
+      <label>Stars</label>
+      <input id="edit-field-stars" type="number" min="0" max="5" placeholder="0">
+    </div>
+    <div class="field" id="edit-field-assignee-wrap">
+      <label>Assignee</label>
+      <input id="edit-field-assignee" placeholder="e.g. Mom">
+    </div>
+    <div class="field" id="edit-field-color-wrap">
+      <label>Color</label>
+      <div class="swatches" id="edit-swatches"></div>
+    </div>
+    <div class="settings-actions">
+      <button class="del-btn" id="edit-delete" style="display:none" onclick="editDelete()">Delete</button>
+      <button class="btn ghost" onclick="closeEdit()">Cancel</button>
+      <button class="btn" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Milestone celebration -->
 <div id="celebrate">
   <div class="celebrate-box">
@@ -375,14 +427,14 @@ function showOsk(input) {
   // Pad the settings box so its bottom (Save button, etc.) scrolls above the keyboard
   requestAnimationFrame(() => {
     const h = osk.offsetHeight;
-    document.querySelectorAll('.settings-box').forEach(b => b.style.paddingBottom = (h + 24) + 'px');
+    document.querySelectorAll('.settings-box, .edit-box').forEach(b => b.style.paddingBottom = (h + 24) + 'px');
     if (input && input.scrollIntoView) input.scrollIntoView({ block: 'center', behavior: 'smooth' });
   });
 }
 function hideOsk() {
   osk.classList.remove('show');
   activeInput = null;
-  document.querySelectorAll('.settings-box').forEach(b => b.style.paddingBottom = '');
+  document.querySelectorAll('.settings-box, .edit-box').forEach(b => b.style.paddingBottom = '');
 }
 
 // Show keyboard when any text input/textarea is focused
@@ -457,6 +509,7 @@ osk.addEventListener('click', (e) => {
 // ---- Dashboard logic ----
 let _last = { cal: '', chores: '', notes: '' };
 let _events = [];
+let _chores = [];
 let _calView = { y: 0, m: 0 };
 let _family = [];
 
@@ -509,9 +562,12 @@ function renderCalendar() {
       const rd = resolveDay(e.day);
       return rd && rd.getTime() === date.getTime();
     });
-    const evHtml = evs.map(e =>
-      '<div class="cal-ev">' + (e.time ? '<span class="cal-ev-time">' + esc(e.time) + '</span> ' : '') + esc(e.title) + '</div>'
-    ).join('');
+    const evHtml = evs.map(e => {
+      const idx = _events.indexOf(e);
+      const color = e.color || '';
+      const style = color ? ' style="border-left-color:' + esc(color) + ';background:' + esc(color) + '22"' : '';
+      return '<div class="cal-ev"' + style + ' onclick="openEditEvent(' + idx + ')" title="Edit event">' + (e.time ? '<span class="cal-ev-time">' + esc(e.time) + '</span> ' : '') + esc(e.title) + '</div>';
+    }).join('');
     cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '"><div class="cal-num">' + d + '</div>' + evHtml + '</div>';
   }
   const total = startDow + daysInMonth;
@@ -524,9 +580,12 @@ function renderCalendar() {
     if (!rd) return true;
     return rd.getFullYear() !== y || rd.getMonth() !== m;
   });
-  const upHtml = upcoming.map(e =>
-    '<div class="item"><div class="t">' + esc(e.title) + '</div><div class="d">' + [e.day, e.time].filter(Boolean).join(' · ') + '</div></div>'
-  ).join('');
+  const upHtml = upcoming.map(e => {
+    const idx = _events.indexOf(e);
+    const color = e.color || '';
+    const style = 'cursor:pointer' + (color ? ';border-left:3px solid ' + esc(color) : '');
+    return '<div class="item" style="' + style + '" onclick="openEditEvent(' + idx + ')"><div class="t">' + esc(e.title) + '</div><div class="d">' + [e.day, e.time].filter(Boolean).join(' · ') + '</div></div>';
+  }).join('');
   document.getElementById('cal-upcoming').innerHTML = upHtml || '<div class="item"><div class="t">No upcoming events</div></div>';
 }
 
@@ -553,6 +612,7 @@ async function loadChores() {
   if (!_family.length) await loadFamily();
   const r = await fetch('/api/chores');
   const d = await r.json();
+  _chores = d;
   const html = d.map((c, i) => {
     const done = !!c.done;
     const member = _family.find(m => m.name === c.assignee);
@@ -560,7 +620,7 @@ async function loadChores() {
     const stars = c.stars ? '<span class="stars">' + '⭐'.repeat(Math.min(c.stars, 5)) + ' ' + c.stars + '</span>' : '';
     return '<div class="item chore-item' + (done ? ' done' : '') + '">' +
       '<input type="checkbox" ' + (done ? 'checked' : '') + ' onchange="toggleChore(' + i + ', this.checked)">' +
-      '<div class="t">' + esc(c.title || '') + '</div>' +
+      '<div class="t" style="cursor:pointer" onclick="openEditChore(' + i + ')" title="Edit chore">' + esc(c.title || '') + '</div>' +
       chip + stars +
       (c.day ? '<div class="d">' + esc(c.day) + '</div>' : '') +
       '</div>';
@@ -636,6 +696,104 @@ async function loadNotes() {
   if (key !== _last.notes) { _last.notes = key; document.getElementById('notes').innerHTML = html; }
 }
 function refreshAll() { loadCalendar(); loadChores(); loadNotes(); loadFamily(); loadRewards(); }
+
+// ---- Edit modal (chores + calendar events) ----
+const EDIT_COLORS = ['#ff7a1a', '#4a9eff', '#4ade80', '#f472b6', '#facc15', '#a78bfa', '#f87171', '#2dd4bf'];
+let _edit = null;  // { type: 'chore'|'event', index: N }
+
+function openEditChore(i) {
+  const c = _chores[i];
+  if (!c) return;
+  _edit = { type: 'chore', index: i };
+  document.getElementById('edit-title').textContent = 'Edit chore';
+  document.getElementById('edit-field-title').value = c.title || '';
+  document.getElementById('edit-field-day').value = c.day || '';
+  document.getElementById('edit-field-time').value = '';
+  document.getElementById('edit-field-stars').value = c.stars || 0;
+  document.getElementById('edit-field-assignee').value = c.assignee || '';
+  document.getElementById('edit-field-day-wrap').style.display = '';
+  document.getElementById('edit-field-time-wrap').style.display = 'none';
+  document.getElementById('edit-field-stars-wrap').style.display = '';
+  document.getElementById('edit-field-assignee-wrap').style.display = '';
+  document.getElementById('edit-field-color-wrap').style.display = 'none';
+  document.getElementById('edit-delete').style.display = '';
+  document.getElementById('edit-modal').classList.add('show');
+}
+
+function openEditEvent(i) {
+  const e = _events[i];
+  if (!e) return;
+  _edit = { type: 'event', index: i };
+  document.getElementById('edit-title').textContent = 'Edit event';
+  document.getElementById('edit-field-title').value = e.title || '';
+  document.getElementById('edit-field-day').value = e.day || '';
+  document.getElementById('edit-field-time').value = e.time || '';
+  document.getElementById('edit-field-day-wrap').style.display = '';
+  document.getElementById('edit-field-time-wrap').style.display = '';
+  document.getElementById('edit-field-stars-wrap').style.display = 'none';
+  document.getElementById('edit-field-assignee-wrap').style.display = 'none';
+  document.getElementById('edit-field-color-wrap').style.display = '';
+  document.getElementById('edit-delete').style.display = '';
+  renderSwatches(e.color || '');
+  document.getElementById('edit-modal').classList.add('show');
+}
+
+function renderSwatches(selected) {
+  const box = document.getElementById('edit-swatches');
+  let html = '<div class="swatch none' + (selected === '' ? ' sel' : '') + '" onclick="pickColor(\'\')" title="No color"></div>';
+  html += EDIT_COLORS.map(c =>
+    '<div class="swatch' + (selected === c ? ' sel' : '') + '" style="background:' + c + '" onclick="pickColor(\'' + c + '\')"></div>'
+  ).join('');
+  box.innerHTML = html;
+}
+
+function pickColor(c) {
+  if (_edit && _edit.type === 'event') {
+    _events[_edit.index].color = c;
+    renderSwatches(c);
+  }
+}
+
+function closeEdit() {
+  document.getElementById('edit-modal').classList.remove('show');
+  hideOsk();
+  _edit = null;
+}
+
+async function saveEdit() {
+  if (!_edit) return;
+  const title = document.getElementById('edit-field-title').value;
+  if (_edit.type === 'chore') {
+    const body = {
+      title,
+      day: document.getElementById('edit-field-day').value,
+      stars: parseInt(document.getElementById('edit-field-stars').value || '0', 10),
+      assignee: document.getElementById('edit-field-assignee').value,
+    };
+    await fetch('/api/chores/' + _edit.index, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    closeEdit();
+    loadChores();
+  } else {
+    const body = {
+      title,
+      day: document.getElementById('edit-field-day').value,
+      time: document.getElementById('edit-field-time').value,
+      color: _events[_edit.index].color || '',
+    };
+    await fetch('/api/calendar/' + _edit.index, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    closeEdit();
+    loadCalendar();
+  }
+}
+
+async function editDelete() {
+  if (!_edit) return;
+  const url = _edit.type === 'chore' ? '/api/chores/' + _edit.index : '/api/calendar/' + _edit.index;
+  await fetch(url, { method: 'DELETE' });
+  closeEdit();
+  if (_edit.type === 'chore') loadChores(); else loadCalendar();
+}
+
 async function addChore() {
   const i = document.getElementById('chore-in');
   if (!i.value) return;
