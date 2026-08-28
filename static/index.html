@@ -25,9 +25,9 @@
   .weather .whilo { font-size:1.05rem; color:#eab676; font-family:Georgia,'Times New Roman',serif; font-style:italic; text-shadow:0 0 12px rgba(255,160,60,0.35); }
 
   /* ---- Notification feed ---- */
-  .feed { display:flex; align-items:center; gap:8px; max-width:340px; background:#1a1d24; border:1px solid #262a33; border-radius:20px; padding:8px 14px; }
-  .feed .feed-icon { font-size:1.1rem; flex:none; }
-  .feed .feed-text { color:var(--muted); font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:opacity .3s ease; }
+  .feed { display:flex; align-items:center; gap:12px; max-width:520px; background:#1a1d24; border:1px solid #262a33; border-radius:22px; padding:12px 20px; }
+  .feed .feed-icon { font-size:1.6rem; flex:none; }
+  .feed .feed-text { color:var(--text); font-size:1.15rem; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:opacity .3s ease; }
   .feed .feed-text.fade { opacity:0; }
 
   .clock { text-align:right; }
@@ -291,18 +291,9 @@
       <label class="check"><input type="checkbox" id="set-notify-news"> Show news feed (RSS)</label>
     </div>
     <div class="field">
-      <label>News source</label>
-      <select id="set-news-preset" onchange="newsPresetChange()">
-        <option value="npr">NPR — Top Stories</option>
-        <option value="bbc">BBC — World News</option>
-        <option value="verge">The Verge — Tech</option>
-        <option value="ars">Ars Technica — Tech</option>
-        <option value="custom">Custom URL…</option>
-      </select>
-    </div>
-    <div class="field" id="news-url-field" style="display:none">
-      <label>Custom news feed URL (RSS/Atom)</label>
-      <input id="set-news-url" placeholder="https://example.com/feed.xml">
+      <label>News sources (RSS/Atom)</label>
+      <div id="news-feed-list"></div>
+      <button class="btn ghost" onclick="addNewsFeed()">+ Add news feed</button>
     </div>
     <div class="field">
       <label class="check"><input type="checkbox" id="set-notify-email"> Show email notifications (coming soon)</label>
@@ -694,14 +685,42 @@ const WMO = {
   80: '🌦️', 81: '🌧️', 82: '🌧️', 85: '🌨️', 86: '🌨️',
   95: '⛈️', 96: '⛈️', 99: '⛈️',
 };
-function wmoIcon(code) { return WMO[code] || '🌡️'; }
+// Night variants (moon instead of sun). Clear night uses the moon-phase emoji.
+const WMO_NIGHT = {
+  0: '🌕', 1: '🌙', 2: '☁️', 3: '☁️', 45: '🌫️', 48: '🌫️',
+  51: '🌧️', 53: '🌧️', 55: '🌧️', 56: '🌧️', 57: '🌧️',
+  61: '🌧️', 63: '🌧️', 65: '🌧️', 66: '🌧️', 67: '🌧️',
+  71: '🌨️', 73: '🌨️', 75: '🌨️', 77: '🌨️',
+  80: '🌧️', 81: '🌧️', 82: '🌧️', 85: '🌨️', 86: '🌨️',
+  95: '⛈️', 96: '⛈️', 99: '⛈️',
+};
+// Moon phase (0..1) -> emoji. 0.5 = full moon.
+function moonEmoji(phase) {
+  if (phase === null || phase === undefined) return '🌕';
+  const p = phase % 1;
+  if (p < 0.0625 || p >= 0.9375) return '🌑';   // new
+  if (p < 0.1875) return '🌒';                    // waxing crescent
+  if (p < 0.3125) return '🌓';                     // first quarter
+  if (p < 0.4375) return '🌔';                     // waxing gibbous
+  if (p < 0.5625) return '🌕';                     // full
+  if (p < 0.6875) return '🌖';                     // waning gibbous
+  if (p < 0.8125) return '🌗';                     // last quarter
+  return '🌘';                                     // waning crescent
+}
+function wmoIcon(code, isDay, moonPhase) {
+  if (isDay === 0 || isDay === false) {
+    if (code === 0) return moonEmoji(moonPhase);   // clear night → moon
+    return WMO_NIGHT[code] || '🌙';
+  }
+  return WMO[code] || '🌡️';
+}
 
 async function loadWeather() {
   try {
     const r = await fetch('/api/weather');
     const d = await r.json();
     if (!d.ok) { document.getElementById('w-hilo').textContent = 'Weather unavailable'; return; }
-    document.getElementById('w-icon').textContent = wmoIcon(d.code);
+    document.getElementById('w-icon').textContent = wmoIcon(d.code, d.is_day, d.moon_phase);
     document.getElementById('w-temp').textContent = Math.round(d.temp) + '°' + d.unit;
     document.getElementById('w-hilo').textContent =
       'H ' + Math.round(d.today_high) + '° / L ' + Math.round(d.today_low) + '°';
@@ -751,19 +770,47 @@ function showFeedItem() {
 }
 
 // ---- Settings modal ----
-const NEWS_PRESETS = {
-  npr: 'https://feeds.npr.org/1001/rss.xml',
-  bbc: 'http://feeds.bbci.co.uk/news/world/rss.xml',
-  verge: 'https://www.theverge.com/rss/index.xml',
-  ars: 'https://feeds.arstechnica.com/arstechnica/index',
-};
-function newsPresetForUrl(url) {
-  for (const k in NEWS_PRESETS) if (NEWS_PRESETS[k] === url) return k;
-  return 'custom';
+const NEWS_PRESETS = [
+  { label: 'NPR — Top Stories', url: 'https://feeds.npr.org/1001/rss.xml' },
+  { label: 'BBC — World News', url: 'http://feeds.bbci.co.uk/news/world/rss.xml' },
+  { label: 'The Verge — Tech', url: 'https://www.theverge.com/rss/index.xml' },
+  { label: 'Ars Technica — Tech', url: 'https://feeds.arstechnica.com/arstechnica/index' },
+];
+function renderNewsFeeds() {
+  const box = document.getElementById('news-feed-list');
+  const feeds = _settings.news_feeds || [];
+  box.innerHTML = feeds.map((url, i) => {
+    const opts = NEWS_PRESETS.map(p =>
+      '<option value="' + esc(p.url) + '"' + (url === p.url ? ' selected' : '') + '>' + esc(p.label) + '</option>'
+    ).join('');
+    const isCustom = !NEWS_PRESETS.some(p => p.url === url);
+    return '<div class="calconn-row">' +
+      '<select onchange="newsFeedChange(' + i + ', this.value)">' +
+      opts +
+      '<option value="__custom__"' + (isCustom ? ' selected' : '') + '>Custom URL…</option>' +
+      '</select>' +
+      '<input type="text" placeholder="https://example.com/feed.xml" value="' + esc(url) + '" onchange="newsFeedChange(' + i + ', this.value)">' +
+      '<button class="del" onclick="newsFeedDelete(' + i + ')">✕</button>' +
+      '</div>';
+  }).join('');
 }
-function newsPresetChange() {
-  const v = document.getElementById('set-news-preset').value;
-  document.getElementById('news-url-field').style.display = (v === 'custom') ? '' : 'none';
+function addNewsFeed() {
+  const feeds = (_settings.news_feeds || []).slice();
+  feeds.push(NEWS_PRESETS[0].url);
+  _settings.news_feeds = feeds;
+  renderNewsFeeds();
+}
+function newsFeedChange(i, val) {
+  const feeds = (_settings.news_feeds || []).slice();
+  if (feeds[i] !== undefined) feeds[i] = (val === '__custom__') ? '' : val;
+  _settings.news_feeds = feeds;
+  if (val === '__custom__') renderNewsFeeds();
+}
+function newsFeedDelete(i) {
+  const feeds = (_settings.news_feeds || []).slice();
+  feeds.splice(i, 1);
+  _settings.news_feeds = feeds;
+  renderNewsFeeds();
 }
 function openSettings() {
   document.getElementById('set-location').value = _settings.location || '';
@@ -775,13 +822,11 @@ function openSettings() {
   document.getElementById('set-notify-cal').checked = !!_settings.notify_calendar;
   document.getElementById('set-notify-news').checked = !!_settings.notify_news;
   document.getElementById('set-notify-email').checked = !!_settings.notify_email;
-  const url = _settings.news_feed_url || NEWS_PRESETS.npr;
-  document.getElementById('set-news-preset').value = newsPresetForUrl(url);
-  document.getElementById('set-news-url').value = url;
-  newsPresetChange();
+  if (!_settings.news_feeds || !_settings.news_feeds.length) _settings.news_feeds = [NEWS_PRESETS[0].url];
   document.getElementById('set-notify-interval').value = _settings.notify_interval || 10;
   renderMemberRows();
   renderCalConns();
+  renderNewsFeeds();
   document.getElementById('settings').classList.add('show');
 }
 function closeSettings() { document.getElementById('settings').classList.remove('show'); }
@@ -878,10 +923,7 @@ async function saveSettings() {
     notify_calendar: document.getElementById('set-notify-cal').checked,
     notify_news: document.getElementById('set-notify-news').checked,
     notify_email: document.getElementById('set-notify-email').checked,
-    news_feed_url: (function () {
-      const preset = document.getElementById('set-news-preset').value;
-      return preset === 'custom' ? document.getElementById('set-news-url').value : NEWS_PRESETS[preset];
-    })(),
+    news_feeds: (_settings.news_feeds || []).filter(u => u && u.trim()),
     notify_interval: parseInt(document.getElementById('set-notify-interval').value, 10) || 10,
     calendar_connections: _settings.calendar_connections || [],
   };

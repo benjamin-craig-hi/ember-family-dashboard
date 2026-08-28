@@ -80,7 +80,7 @@ DEFAULT_SETTINGS = {
     "notify_calendar": True,
     "notify_news": False,
     "notify_email": False,
-    "news_feed_url": "https://feeds.npr.org/1001/rss.xml",  # NPR Top Stories (default)
+    "news_feeds": ["https://feeds.npr.org/1001/rss.xml"],  # NPR Top Stories (default)
     "notify_interval": 10,         # seconds between rotating feed items
     # Calendar connections (configured now; sync is a later phase)
     "calendar_connections": [],    # [{provider, url}]
@@ -405,8 +405,8 @@ def get_weather():
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}"
-        "&current=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature"
-        f"&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&temperature_unit={temp_unit}"
+        "&current=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,is_day"
+        f"&daily=temperature_2m_max,temperature_2m_min,weather_code,moon_phase&timezone=auto&temperature_unit={temp_unit}"
     )
     try:
         with urllib.request.urlopen(url, timeout=8) as r:
@@ -422,6 +422,8 @@ def get_weather():
         "apparent": cur.get("apparent_temperature"),
         "humidity": cur.get("relative_humidity_2m"),
         "code": cur.get("weather_code"),
+        "is_day": cur.get("is_day"),
+        "moon_phase": (daily.get("moon_phase") or [None])[0],
         "unit": unit,
         "today_high": (daily.get("temperature_2m_max") or [None])[0],
         "today_low": (daily.get("temperature_2m_min") or [None])[0],
@@ -564,13 +566,22 @@ def get_notifications():
                     "text": f"{label}: {e.get('title', '')}" + (f" at {e['time']}" if e.get("time") else ""),
                 })
 
-    # 2. News feed (optional RSS)
-    if s.get("notify_news") and s.get("news_feed_url"):
-        try:
-            for item in _fetch_rss(s["news_feed_url"], 5):
-                feed.append({"type": "news", "icon": "📰", "text": item["title"], "link": item["link"]})
-        except Exception:
-            feed.append({"type": "news", "icon": "📰", "text": "News feed unavailable"})
+    # 2. News feed (optional RSS — one or more feeds)
+    if s.get("notify_news"):
+        feeds = s.get("news_feeds") or []
+        if isinstance(feeds, str):
+            feeds = [feeds]
+        # backward-compat: older settings used a single news_feed_url
+        if not feeds and s.get("news_feed_url"):
+            feeds = [s["news_feed_url"]]
+        for url in feeds:
+            if not url:
+                continue
+            try:
+                for item in _fetch_rss(url, 5):
+                    feed.append({"type": "news", "icon": "📰", "text": item["title"], "link": item["link"]})
+            except Exception:
+                feed.append({"type": "news", "icon": "📰", "text": "News feed unavailable"})
 
     # 3. Email notifications (placeholder — no email integration yet)
     if s.get("notify_email"):
