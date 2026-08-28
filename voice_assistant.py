@@ -170,6 +170,48 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_note",
+            "description": "Delete a note from the family dashboard by matching its text",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The note text (or a distinctive part of it) to delete"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_chore",
+            "description": "Delete a chore from the family dashboard by matching its title",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "The chore title to delete"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_calendar_event",
+            "description": "Delete an event from the family calendar by matching its title",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "The event title to delete"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
 ]
 
 
@@ -226,6 +268,27 @@ def add_calendar_event(title, day="", time=""):
     _save_json("calendar.json", events)
 
 
+def delete_note(text):
+    notes = _load_json("notes.json", [])
+    t = text.strip().lower()
+    notes = [n for n in notes if t not in n.get("text", "").strip().lower()]
+    _save_json("notes.json", notes)
+
+
+def delete_chore(title):
+    chores = _load_json("chores.json", [])
+    t = title.strip().lower()
+    chores = [c for c in chores if c.get("title", "").strip().lower() != t]
+    _save_json("chores.json", chores)
+
+
+def delete_calendar_event(title):
+    events = _load_json("calendar.json", [])
+    t = title.strip().lower()
+    events = [e for e in events if e.get("title", "").strip().lower() != t]
+    _save_json("calendar.json", events)
+
+
 def run_tool(name, args):
     if name == "add_note":
         add_note(args.get("text", ""))
@@ -235,6 +298,12 @@ def run_tool(name, args):
         complete_chore(args.get("title", ""))
     elif name == "add_calendar_event":
         add_calendar_event(args.get("title", ""), args.get("day", ""), args.get("time", ""))
+    elif name == "delete_note":
+        delete_note(args.get("text", ""))
+    elif name == "delete_chore":
+        delete_chore(args.get("title", ""))
+    elif name == "delete_calendar_event":
+        delete_calendar_event(args.get("title", ""))
     else:
         print(f"[tool] unknown tool: {name}", flush=True)
 
@@ -406,7 +475,8 @@ def ask_llm(text):
             "You help the family stay organized and connected. "
             "Answer in one short sentence, in plain spoken language. No emoji, no lists. "
             "When the user asks you to add a note, chore, or calendar event, use the "
-            "appropriate tool to actually save it. For calendar events, resolve relative "
+            "appropriate tool to actually save it. When the user asks you to delete or remove "
+            "a note, chore, or calendar event, use the matching delete tool. For calendar events, resolve relative "
             f"dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."
         )},
         {"role": "user", "content": text},
