@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ember — Grocery List</title>
+<style>
+  :root { --bg:#14161c; --panel:#1c1f27; --accent:#eab676; --text:#e8e6e1; --muted:#8a8f98; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; min-height:100vh; padding:16px; }
+  h1 { font-size:1.4rem; margin-bottom:4px; }
+  .sub { color:var(--muted); font-size:.85rem; margin-bottom:16px; }
+  .add { display:flex; gap:8px; margin-bottom:16px; }
+  .add input { flex:1; background:var(--panel); border:1px solid #333a46; border-radius:8px; padding:12px; color:var(--text); font-size:1rem; }
+  .add button { background:var(--accent); color:#111; border:none; border-radius:8px; padding:0 18px; font-size:1.2rem; font-weight:700; }
+  ul { list-style:none; }
+  li { display:flex; align-items:center; gap:10px; background:var(--panel); border-radius:8px; padding:12px; margin-bottom:8px; }
+  li input[type=checkbox] { width:22px; height:22px; accent-color:var(--accent); }
+  li .txt { flex:1; font-size:1rem; }
+  li.done .txt { text-decoration:line-through; color:var(--muted); }
+  li .del { background:none; border:none; color:var(--muted); font-size:1.1rem; padding:4px; }
+  .empty { color:var(--muted); text-align:center; padding:30px 0; }
+  .footer { margin-top:20px; text-align:center; color:var(--muted); font-size:.75rem; }
+</style>
+</head>
+<body>
+  <h1>🛒 Grocery List</h1>
+  <div class="sub">Shared with the family dashboard</div>
+  <div class="add">
+    <input id="in" placeholder="Add an item..." autocomplete="off">
+    <button onclick="add()">+</button>
+  </div>
+  <ul id="list"></ul>
+  <div class="footer">Ember — light from within the home</div>
+
+<script>
+async function load() {
+  const r = await fetch('/api/lists');
+  const d = await r.json();
+  const items = (d.lists && d.lists.grocery) || [];
+  const ul = document.getElementById('list');
+  if (!items.length) { ul.innerHTML = '<div class="empty">Nothing yet — add an item above.</div>'; return; }
+  ul.innerHTML = items.map((it, i) =>
+    '<li class="' + (it.done ? 'done' : '') + '">' +
+    '<input type="checkbox" ' + (it.done ? 'checked' : '') + ' onchange="toggle(' + i + ', this.checked)">' +
+    '<span class="txt">' + esc(it.text) + '</span>' +
+    '<button class="del" onclick="del(' + i + ')">✕</button>' +
+    '</li>'
+  ).join('');
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function add() {
+  const inp = document.getElementById('in');
+  const text = inp.value.trim();
+  if (!text) return;
+  await fetch('/api/lists/grocery', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text}) });
+  inp.value = '';
+  load();
+}
+async function toggle(i, done) {
+  await fetch('/api/lists/grocery/' + i, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({done}) });
+  load();
+}
+async function del(i) {
+  await fetch('/api/lists/grocery/' + i, { method:'DELETE' });
+  load();
+}
+document.getElementById('in').addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+load();
+</script>
+</body>
+</html>

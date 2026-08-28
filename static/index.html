@@ -191,6 +191,16 @@
   .photo-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 10px; background:#22262f; border-radius:6px; margin-bottom:6px; }
   .photo-row span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .muted { color:var(--muted); font-size:.85rem; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.8rem; color:var(--accent); }
+  .list-item { display:flex; align-items:center; gap:8px; background:#22262f; border-radius:6px; padding:6px 10px; margin-bottom:6px; }
+  .list-item .txt { flex:1; }
+  .list-item.done .txt { text-decoration:line-through; color:var(--muted); }
+  .list-item .del { background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; }
+  .list-item input[type=checkbox] { width:18px; height:18px; accent-color:var(--accent); }
+  .countdown-row { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#22262f; border-radius:6px; padding:8px 10px; margin-bottom:6px; }
+  .countdown-row .cd-days { color:var(--accent); font-weight:700; font-size:1.1rem; }
+  .countdown-row .del { background:none; border:none; color:var(--muted); cursor:pointer; }
+  body.sleeping { filter:brightness(.35); transition:filter .5s; }
 </style>
 </head>
 <body>
@@ -368,6 +378,45 @@
       <div id="photo-list"></div>
       <input type="file" id="photo-file" accept="image/*,video/*" multiple style="display:none">
       <button class="btn ghost" onclick="document.getElementById('photo-file').click()">+ Add photos / videos</button>
+    </div>
+
+    <h3>Lists</h3>
+    <div class="field">
+      <label>Grocery list (also on phones at <span class="mono">/grocery.html</span>)</label>
+      <div id="grocery-list"></div>
+      <div class="add"><input id="grocery-in" placeholder="Add grocery item..."><button onclick="addGrocery()">+</button></div>
+    </div>
+    <div class="field">
+      <label>Custom lists</label>
+      <div id="custom-lists"></div>
+      <div class="add"><input id="custom-list-in" placeholder="New list name..."><button onclick="addCustomList()">+</button></div>
+    </div>
+
+    <h3>Parental PIN lock</h3>
+    <div class="field">
+      <label>4-digit PIN (empty = no lock)</label>
+      <input id="set-pin" type="password" inputmode="numeric" maxlength="4" placeholder="0000">
+    </div>
+
+    <h3>Sleep mode</h3>
+    <div class="field">
+      <label class="check"><input type="checkbox" id="set-sleep-enabled"> Dim screen during sleep hours</label>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Sleep from</label>
+        <input id="set-sleep-start" type="time" value="22:00">
+      </div>
+      <div class="field">
+        <label>Sleep until</label>
+        <input id="set-sleep-end" type="time" value="06:00">
+      </div>
+    </div>
+
+    <h3>Event countdowns</h3>
+    <div class="field">
+      <div id="countdown-list"></div>
+      <div class="add"><input id="countdown-title" placeholder="Event name..."><input id="countdown-date" type="date"><button onclick="addCountdown()">+</button></div>
     </div>
 
     <div class="settings-actions">
@@ -1167,6 +1216,12 @@ function newsFeedDelete(i) {
   renderNewsFeeds();
 }
 function openSettings() {
+  // Parental PIN gate: if a PIN is set, require it before opening settings.
+  const pin = _settings.pin || '';
+  if (pin) {
+    const entered = prompt('Enter PIN to open settings:');
+    if (entered !== pin) { alert('Incorrect PIN'); return; }
+  }
   document.getElementById('set-location').value = _settings.location || '';
   document.getElementById('set-timefmt').value = _settings.time_format || '12h';
   document.getElementById('set-datefmt').value = _settings.date_format || 'weekday';
@@ -1182,10 +1237,16 @@ function openSettings() {
   document.getElementById('set-notify-interval').value = _settings.notify_interval || 10;
   document.getElementById('set-ss-enabled').checked = _settings.screensaver_enabled !== false;
   document.getElementById('set-ss-idle').value = _settings.screensaver_idle_minutes || 5;
+  document.getElementById('set-pin').value = _settings.pin || '';
+  document.getElementById('set-sleep-enabled').checked = !!_settings.sleep_mode;
+  document.getElementById('set-sleep-start').value = _settings.sleep_start || '22:00';
+  document.getElementById('set-sleep-end').value = _settings.sleep_end || '06:00';
   renderMemberRows();
   renderCalConns();
   renderNewsFeeds();
   loadPhotos();
+  loadLists();
+  renderCountdowns();
   document.getElementById('settings').classList.add('show');
 }
 function closeSettings() { document.getElementById('settings').classList.remove('show'); }
@@ -1304,6 +1365,11 @@ async function saveSettings() {
     calendar_connections: _settings.calendar_connections || [],
     screensaver_enabled: document.getElementById('set-ss-enabled').checked,
     screensaver_idle_minutes: parseInt(document.getElementById('set-ss-idle').value, 10) || 5,
+    pin: document.getElementById('set-pin').value,
+    sleep_mode: document.getElementById('set-sleep-enabled').checked,
+    sleep_start: document.getElementById('set-sleep-start').value,
+    sleep_end: document.getElementById('set-sleep-end').value,
+    countdowns: _settings.countdowns || [],
   };
   // geocode the location to lat/lon
   try {
@@ -1319,6 +1385,132 @@ async function saveSettings() {
   await loadSettings();
   loadWeather();
   loadNotifications();
+}
+
+// ---- Lists (Phase 5) ----
+let _lists = { grocery: [], custom: [] };
+async function loadLists() {
+  const r = await fetch('/api/lists');
+  const d = await r.json();
+  _lists = d.lists || { grocery: [], custom: [] };
+  renderGrocery();
+  renderCustomLists();
+}
+function renderGrocery() {
+  const box = document.getElementById('grocery-list');
+  const items = _lists.grocery || [];
+  box.innerHTML = items.map((it, i) =>
+    '<div class="list-item' + (it.done ? ' done' : '') + '">' +
+    '<input type="checkbox" ' + (it.done ? 'checked' : '') + ' onchange="toggleGrocery(' + i + ', this.checked)">' +
+    '<span class="txt">' + esc(it.text) + '</span>' +
+    '<button class="del" onclick="delGrocery(' + i + ')">✕</button>' +
+    '</div>'
+  ).join('') || '<div class="muted">No items yet</div>';
+}
+function renderCustomLists() {
+  const box = document.getElementById('custom-lists');
+  const lists = _lists.custom || [];
+  box.innerHTML = lists.map((l, i) => {
+    const items = (l.items || []).map((it, j) =>
+      '<div class="list-item' + (it.done ? ' done' : '') + '">' +
+      '<input type="checkbox" ' + (it.done ? 'checked' : '') + ' onchange="toggleCustomItem(' + i + ',' + j + ', this.checked)">' +
+      '<span class="txt">' + esc(it.text) + '</span>' +
+      '<button class="del" onclick="delCustomItem(' + i + ',' + j + ')">✕</button>' +
+      '</div>'
+    ).join('');
+    return '<div style="margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+      '<strong>' + esc(l.name) + '</strong>' +
+      '<button class="del" onclick="delCustomList(' + i + ')">✕</button>' +
+      '</div>' + items +
+      '<div class="add"><input id="custom-item-' + i + '" placeholder="Add item..."><button onclick="addCustomItem(' + i + ')">+</button></div></div>';
+  }).join('') || '<div class="muted">No custom lists yet</div>';
+}
+async function addGrocery() {
+  const inp = document.getElementById('grocery-in');
+  const text = inp.value.trim();
+  if (!text) return;
+  await fetch('/api/lists/grocery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  inp.value = '';
+  loadLists();
+}
+async function toggleGrocery(i, done) {
+  await fetch('/api/lists/grocery/' + i, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done }) });
+  loadLists();
+}
+async function delGrocery(i) {
+  await fetch('/api/lists/grocery/' + i, { method: 'DELETE' });
+  loadLists();
+}
+async function addCustomList() {
+  const inp = document.getElementById('custom-list-in');
+  const name = inp.value.trim();
+  if (!name) return;
+  await fetch('/api/lists/custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+  inp.value = '';
+  loadLists();
+}
+async function delCustomList(i) {
+  await fetch('/api/lists/custom/' + i, { method: 'DELETE' });
+  loadLists();
+}
+async function addCustomItem(i) {
+  const inp = document.getElementById('custom-item-' + i);
+  const text = inp.value.trim();
+  if (!text) return;
+  await fetch('/api/lists/custom/' + i + '/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  loadLists();
+}
+async function toggleCustomItem(i, j, done) {
+  await fetch('/api/lists/custom/' + i + '/items/' + j, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done }) });
+  loadLists();
+}
+async function delCustomItem(i, j) {
+  await fetch('/api/lists/custom/' + i + '/items/' + j, { method: 'DELETE' });
+  loadLists();
+}
+
+// ---- Countdowns (Phase 5) ----
+function renderCountdowns() {
+  const box = document.getElementById('countdown-list');
+  const cds = _settings.countdowns || [];
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  box.innerHTML = cds.map((c, i) => {
+    const d = new Date(c.date + 'T00:00:00');
+    const days = Math.ceil((d - now) / 86400000);
+    const label = days < 0 ? 'passed' : (days === 0 ? 'today' : days + ' days');
+    return '<div class="countdown-row"><span>' + esc(c.title) + '</span>' +
+      '<span class="cd-days">' + label + '</span>' +
+      '<button class="del" onclick="delCountdown(' + i + ')">✕</button></div>';
+  }).join('') || '<div class="muted">No countdowns yet</div>';
+}
+function addCountdown() {
+  const title = document.getElementById('countdown-title').value.trim();
+  const date = document.getElementById('countdown-date').value;
+  if (!title || !date) return;
+  _settings.countdowns = (_settings.countdowns || []).concat([{ title, date }]);
+  document.getElementById('countdown-title').value = '';
+  document.getElementById('countdown-date').value = '';
+  renderCountdowns();
+}
+function delCountdown(i) {
+  _settings.countdowns = (_settings.countdowns || []).slice();
+  _settings.countdowns.splice(i, 1);
+  renderCountdowns();
+}
+
+// ---- Sleep mode (Phase 5) ----
+function applySleepMode() {
+  const s = _settings;
+  if (!s.sleep_mode) { document.body.classList.remove('sleeping'); return; }
+  const now = new Date();
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const [sh, sm] = (s.sleep_start || '22:00').split(':').map(Number);
+  const [eh, em] = (s.sleep_end || '06:00').split(':').map(Number);
+  const start = sh * 60 + sm, end = eh * 60 + em;
+  let sleeping;
+  if (start <= end) sleeping = cur >= start && cur < end;
+  else sleeping = cur >= start || cur < end;  // overnight window
+  document.body.classList.toggle('sleeping', sleeping);
 }
 
 // ---- Milestone celebration ----
@@ -1443,7 +1635,7 @@ setInterval(() => {
 }, 8000);
 
 initCalView();
-loadSettings().then(() => loadNotifications());
+loadSettings().then(() => { loadNotifications(); applySleepMode(); });
 loadMilestones();
 refreshAll();
 tickClock();
@@ -1453,6 +1645,7 @@ setInterval(loadWeather, 600000);   // refresh weather every 10 min
 setInterval(loadNotifications, 300000);  // refresh feed every 5 min
 loadPhotos();
 setInterval(ssTick, 1000);   // screensaver idle check every second
+setInterval(applySleepMode, 30000);  // re-check sleep window every 30s
 document.getElementById('photo-file').addEventListener('change', (e) => {
   if (e.target.files && e.target.files.length) uploadPhotos(e.target.files);
   e.target.value = '';

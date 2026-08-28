@@ -90,6 +90,12 @@ DEFAULT_SETTINGS = {
     # Screensaver (Phase 3)
     "screensaver_enabled": True,
     "screensaver_idle_minutes": 5,
+    # Home management (Phase 5)
+    "pin": "",                     # 4-digit parental PIN (empty = no lock)
+    "sleep_mode": False,            # dim screen + pause feed during sleep hours
+    "sleep_start": "22:00",         # 24h HH:MM
+    "sleep_end": "06:00",
+    "countdowns": [],               # [{title, date}]
 }
 
 
@@ -772,6 +778,131 @@ def delete_photo(name: str):
         os.remove(p)
         return {"ok": True}
     return {"ok": False, "error": "not found"}
+
+
+# ---------------------------------------------------------------------------
+# Lists (Phase 5) — shared grocery list + custom lists
+# ---------------------------------------------------------------------------
+
+def _load_lists():
+    return _load("lists.json", {"grocery": [], "custom": []})
+
+
+def _save_lists(l):
+    _save("lists.json", l)
+
+
+@app.get("/api/lists")
+def get_lists():
+    return {"ok": True, "lists": _load_lists()}
+
+
+@app.post("/api/lists/grocery")
+async def add_grocery_item(request: Request):
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        return {"ok": False, "error": "empty text"}
+    l = _load_lists()
+    l.setdefault("grocery", []).append({"text": text, "done": False})
+    _save_lists(l)
+    return {"ok": True}
+
+
+@app.put("/api/lists/grocery/{index}")
+async def toggle_grocery_item(index: int, request: Request):
+    body = await request.json()
+    l = _load_lists()
+    items = l.setdefault("grocery", [])
+    if 0 <= index < len(items):
+        if "done" in body:
+            items[index]["done"] = bool(body["done"])
+        if "text" in body:
+            items[index]["text"] = (body.get("text") or "").strip()
+        _save_lists(l)
+        return {"ok": True}
+    return {"ok": False, "error": "index out of range"}
+
+
+@app.delete("/api/lists/grocery/{index}")
+def delete_grocery_item(index: int):
+    l = _load_lists()
+    items = l.setdefault("grocery", [])
+    if 0 <= index < len(items):
+        items.pop(index)
+        _save_lists(l)
+        return {"ok": True}
+    return {"ok": False, "error": "index out of range"}
+
+
+@app.post("/api/lists/custom")
+async def create_custom_list(request: Request):
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "error": "empty name"}
+    l = _load_lists()
+    if any(c.get("name", "").lower() == name.lower() for c in l.setdefault("custom", [])):
+        return {"ok": False, "error": "list already exists"}
+    l["custom"].append({"name": name, "items": []})
+    _save_lists(l)
+    return {"ok": True}
+
+
+@app.delete("/api/lists/custom/{index}")
+def delete_custom_list(index: int):
+    l = _load_lists()
+    lists = l.setdefault("custom", [])
+    if 0 <= index < len(lists):
+        lists.pop(index)
+        _save_lists(l)
+        return {"ok": True}
+    return {"ok": False, "error": "index out of range"}
+
+
+@app.post("/api/lists/custom/{index}/items")
+async def add_custom_item(index: int, request: Request):
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        return {"ok": False, "error": "empty text"}
+    l = _load_lists()
+    lists = l.setdefault("custom", [])
+    if 0 <= index < len(lists):
+        lists[index].setdefault("items", []).append({"text": text, "done": False})
+        _save_lists(l)
+        return {"ok": True}
+    return {"ok": False, "error": "index out of range"}
+
+
+@app.put("/api/lists/custom/{index}/items/{item_index}")
+async def toggle_custom_item(index: int, item_index: int, request: Request):
+    body = await request.json()
+    l = _load_lists()
+    lists = l.setdefault("custom", [])
+    if 0 <= index < len(lists):
+        items = lists[index].setdefault("items", [])
+        if 0 <= item_index < len(items):
+            if "done" in body:
+                items[item_index]["done"] = bool(body["done"])
+            if "text" in body:
+                items[item_index]["text"] = (body.get("text") or "").strip()
+            _save_lists(l)
+            return {"ok": True}
+    return {"ok": False, "error": "index out of range"}
+
+
+@app.delete("/api/lists/custom/{index}/items/{item_index}")
+def delete_custom_item(index: int, item_index: int):
+    l = _load_lists()
+    lists = l.setdefault("custom", [])
+    if 0 <= index < len(lists):
+        items = lists[index].setdefault("items", [])
+        if 0 <= item_index < len(items):
+            items.pop(item_index)
+            _save_lists(l)
+            return {"ok": True}
+    return {"ok": False, "error": "index out of range"}
 
 
 app.mount("/photos", StaticFiles(directory=PHOTOS_DIR), name="photos")

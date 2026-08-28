@@ -304,6 +304,42 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_grocery_item",
+            "description": "Add an item to the shared grocery list",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The grocery item to add"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_grocery",
+            "description": "List the current grocery list items",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_grocery_item",
+            "description": "Remove an item from the grocery list by matching its text",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The grocery item text (or a distinctive part of it) to remove"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
 ]
 
 
@@ -450,6 +486,36 @@ def import_ical(url):
         return {"ok": False, "error": str(e)}
 
 
+def _load_lists():
+    return _load_json("lists.json", {"grocery": [], "custom": []})
+
+
+def _save_lists(l):
+    _save_json("lists.json", l)
+
+
+def add_grocery_item(text):
+    l = _load_lists()
+    l.setdefault("grocery", []).append({"text": text, "done": False})
+    _save_lists(l)
+
+
+def list_grocery():
+    l = _load_lists()
+    return [{"text": it.get("text", ""), "done": it.get("done", False)} for it in l.get("grocery", [])]
+
+
+def remove_grocery_item(text):
+    l = _load_lists()
+    t = text.strip().lower()
+    items = l.get("grocery", [])
+    kept = [it for it in items if t not in it.get("text", "").strip().lower()]
+    removed = len(items) - len(kept)
+    l["grocery"] = kept
+    _save_lists(l)
+    return removed
+
+
 # Valid settings keys the voice assistant may change (mirrors main.py DEFAULT_SETTINGS)
 _SETTING_KEYS = {
     "assistant_name", "tts_voice", "location", "time_format", "date_format",
@@ -504,6 +570,13 @@ def run_tool(name, args):
         return ("deleted" if delete_photo(args.get("name", "")) else "not_found")
     elif name == "import_ical":
         return json.dumps(import_ical(args.get("url", "")))
+    elif name == "add_grocery_item":
+        add_grocery_item(args.get("text", ""))
+        return "added"
+    elif name == "list_grocery":
+        return json.dumps(list_grocery())
+    elif name == "remove_grocery_item":
+        return ("deleted" if remove_grocery_item(args.get("text", "")) else "not_found")
     elif name == "get_settings":
         return json.dumps(get_settings())
     elif name == "update_settings":
@@ -528,7 +601,7 @@ def confirmation_for(results):
             parts.append(phrases[name])
         elif name == "complete_chore" and status == "completed":
             parts.append(phrases["complete_chore"])
-        elif name in ("delete_note", "delete_chore", "delete_calendar_event", "delete_photo"):
+        elif name in ("delete_note", "delete_chore", "delete_calendar_event", "delete_photo", "remove_grocery_item"):
             if status == "deleted":
                 parts.append("I deleted that.")
             else:
@@ -700,7 +773,11 @@ def ask_llm(text):
         "currently is, use the get_settings tool. "
         "When the user asks about the screensaver photos or videos, use the list_photos tool to see what's there, "
         "and delete_photo to remove one (find the exact filename first). "
-        "When the user asks to import a calendar from a link or feed, use the import_ical tool with that URL."
+        "When the user asks to import a calendar from a link or feed, use the import_ical tool with that URL. "
+        "When the user asks to add something to the grocery list, use the add_grocery_item tool. "
+        "When they ask what's on the grocery list, use list_grocery. "
+        "When they ask to remove something from the grocery list, first use list_grocery to find the exact item, "
+        "then use remove_grocery_item with that text."
     )
     messages = [
         {"role": "system", "content": system},
