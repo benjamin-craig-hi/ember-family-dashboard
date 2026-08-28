@@ -441,14 +441,19 @@ def build_wake_model(cfg):
     from openwakeword import get_pretrained_model_paths
 
     model_name = cfg["wake_word_model"]
-    paths = get_pretrained_model_paths()
-    model_path = None
-    for p in paths:
-        if model_name in p:
-            model_path = p
-            break
-    if model_path is None:
-        raise RuntimeError(f"Wake word model {model_name} not found in {paths}")
+
+    # Support a direct path to a custom-trained model (e.g. "models/hey_ember.onnx").
+    if model_name.endswith(".onnx") and os.path.exists(model_name):
+        model_path = model_name
+    else:
+        paths = get_pretrained_model_paths()
+        model_path = None
+        for p in paths:
+            if model_name in p:
+                model_path = p
+                break
+        if model_path is None:
+            raise RuntimeError(f"Wake word model {model_name} not found in {paths}")
 
     kwargs = {}
     if cfg.get("custom_verifier"):
