@@ -212,6 +212,30 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_calendar_events",
+            "description": "List upcoming calendar events so you can find the exact title before editing or deleting",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_chores",
+            "description": "List current chores so you can find the exact title before editing or deleting",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_notes",
+            "description": "List current notes so you can find the exact text before deleting",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 
@@ -271,60 +295,103 @@ def add_calendar_event(title, day="", time=""):
 def delete_note(text):
     notes = _load_json("notes.json", [])
     t = text.strip().lower()
-    notes = [n for n in notes if t not in n.get("text", "").strip().lower()]
-    _save_json("notes.json", notes)
+    kept = [n for n in notes if t not in n.get("text", "").strip().lower()]
+    removed = len(notes) - len(kept)
+    _save_json("notes.json", kept)
+    return removed
 
 
 def delete_chore(title):
     chores = _load_json("chores.json", [])
     t = title.strip().lower()
-    chores = [c for c in chores if c.get("title", "").strip().lower() != t]
-    _save_json("chores.json", chores)
+    kept = [c for c in chores if t not in c.get("title", "").strip().lower()]
+    removed = len(chores) - len(kept)
+    _save_json("chores.json", kept)
+    return removed
 
 
 def delete_calendar_event(title):
     events = _load_json("calendar.json", [])
     t = title.strip().lower()
-    events = [e for e in events if e.get("title", "").strip().lower() != t]
-    _save_json("calendar.json", events)
+    kept = [e for e in events if t not in e.get("title", "").strip().lower()]
+    removed = len(events) - len(kept)
+    _save_json("calendar.json", kept)
+    return removed
+
+
+def list_calendar_events():
+    events = _load_json("calendar.json", [])
+    return [{"title": e.get("title", ""), "day": e.get("day", ""), "time": e.get("time", "")} for e in events]
+
+
+def list_chores():
+    chores = _load_json("chores.json", [])
+    return [{"title": c.get("title", ""), "day": c.get("day", ""), "done": c.get("done", False)} for c in chores]
+
+
+def list_notes():
+    notes = _load_json("notes.json", [])
+    return [{"text": n.get("text", "")} for n in notes]
 
 
 def run_tool(name, args):
     if name == "add_note":
         add_note(args.get("text", ""))
+        return "added"
     elif name == "add_chore":
         add_chore(args.get("title", ""), args.get("day", ""), args.get("stars", 0), args.get("assignee", ""))
+        return "added"
     elif name == "complete_chore":
         complete_chore(args.get("title", ""))
+        return "completed"
     elif name == "add_calendar_event":
         add_calendar_event(args.get("title", ""), args.get("day", ""), args.get("time", ""))
+        return "added"
     elif name == "delete_note":
-        delete_note(args.get("text", ""))
+        return ("deleted" if delete_note(args.get("text", "")) else "not_found")
     elif name == "delete_chore":
-        delete_chore(args.get("title", ""))
+        return ("deleted" if delete_chore(args.get("title", "")) else "not_found")
     elif name == "delete_calendar_event":
-        delete_calendar_event(args.get("title", ""))
+        return ("deleted" if delete_calendar_event(args.get("title", "")) else "not_found")
+    elif name == "list_calendar_events":
+        return json.dumps(list_calendar_events())
+    elif name == "list_chores":
+        return json.dumps(list_chores())
+    elif name == "list_notes":
+        return json.dumps(list_notes())
     else:
         print(f"[tool] unknown tool: {name}", flush=True)
+        return "unknown"
 
 
-def confirmation_for(names):
+def confirmation_for(results):
     phrases = {
         "add_note": "I added that to your notes.",
         "add_chore": "I added that to your chores.",
         "complete_chore": "Nice, I marked that chore done.",
         "add_calendar_event": "I added that to your calendar.",
     }
-    parts = [phrases[n] for n in names if n in phrases]
+    # results is a list of (name, status) tuples
+    parts = []
+    for name, status in results:
+        if name in phrases and status == "added":
+            parts.append(phrases[name])
+        elif name == "complete_chore" and status == "completed":
+            parts.append(phrases["complete_chore"])
+        elif name in ("delete_note", "delete_chore", "delete_calendar_event"):
+            if status == "deleted":
+                parts.append("I deleted that.")
+            else:
+                parts.append("I couldn't find anything matching that to delete.")
     return " ".join(parts) if parts else "Done."
 
 
 def handle_tool_calls(msg):
-    """Execute any tool calls the LLM requested and return a spoken reply."""
+    """Legacy single-round helper — no longer used (ask_llm now loops internally)."""
     tool_calls = getattr(msg, "tool_calls", None)
     if not tool_calls:
         return msg.content or ""
-    done = []
+    results = []
     for tc in tool_calls:
         fn = tc.function
         name = fn.name
@@ -335,9 +402,9 @@ def handle_tool_calls(msg):
         except Exception:
             args = {}
         print(f"[tool] {name}({args})", flush=True)
-        run_tool(name, args)
-        done.append(name)
-    return confirmation_for(done)
+        status = run_tool(name, args)
+        results.append((name, status))
+    return confirmation_for(results)
 
 
 # ---------------------------------------------------------------------------
@@ -469,19 +536,52 @@ def _get_client():
 def ask_llm(text):
     today = datetime.now().strftime("%A, %B %d, %Y")
     name = _load_settings().get("assistant_name") or ASSISTANT_NAME
-    resp = _get_client().chat(model=MODEL, messages=[
-        {"role": "system", "content": (
-            f"Today is {today}. You are {name}, the warm, self-hosted family assistant — the light from within the home. "
-            "You help the family stay organized and connected. "
-            "Answer in one short sentence, in plain spoken language. No emoji, no lists. "
-            "When the user asks you to add a note, chore, or calendar event, use the "
-            "appropriate tool to actually save it. When the user asks you to delete or remove "
-            "a note, chore, or calendar event, use the matching delete tool. For calendar events, resolve relative "
-            f"dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."
-        )},
+    system = (
+        f"Today is {today}. You are {name}, the warm, self-hosted family assistant — the light from within the home. "
+        "You help the family stay organized and connected. "
+        "Answer in one short sentence, in plain spoken language. No emoji, no lists. "
+        "When the user asks you to add a note, chore, or calendar event, use the "
+        "appropriate tool to actually save it. When the user asks you to delete, remove, or edit "
+        "a note, chore, or calendar event, first use the matching list tool to find the exact "
+        "title, then use the matching delete tool with that exact title. For calendar events, resolve relative "
+        f"dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."
+    )
+    messages = [
+        {"role": "system", "content": system},
         {"role": "user", "content": text},
-    ], tools=TOOLS, options={"num_ctx": 4096})
-    return resp.message
+    ]
+    last_results = []
+    for _ in range(4):  # allow up to 4 tool rounds (list -> delete -> confirm)
+        resp = _get_client().chat(model=MODEL, messages=messages, tools=TOOLS, options={"num_ctx": 4096})
+        msg = resp.message
+        tool_calls = getattr(msg, "tool_calls", None)
+        if not tool_calls:
+            return msg.content or ""
+        # Append the assistant's tool-call turn
+        messages.append({
+            "role": "assistant",
+            "content": msg.content or "",
+            "tool_calls": [
+                {"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                for tc in tool_calls
+            ],
+        })
+        # Execute each tool and append its result
+        last_results = []
+        for tc in tool_calls:
+            name = tc.function.name
+            try:
+                args = tc.function.arguments
+                if isinstance(args, str):
+                    args = json.loads(args)
+            except Exception:
+                args = {}
+            print(f"[tool] {name}({args})", flush=True)
+            status = run_tool(name, args)
+            last_results.append((name, status))
+            messages.append({"role": "tool", "content": str(status), "tool_name": name})
+    # If we exhausted rounds, fall back to a confirmation phrase
+    return confirmation_for(last_results)
 
 
 # ---------------------------------------------------------------------------
@@ -676,8 +776,7 @@ def main():
 
                 # 4. LLM (with tool calling)
                 print("[llm] thinking...", flush=True)
-                msg = ask_llm(text)
-                reply = handle_tool_calls(msg)
+                reply = ask_llm(text)
                 print(f"[llm] {reply!r}", flush=True)
 
                 # 5. TTS
