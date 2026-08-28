@@ -778,10 +778,47 @@ function showFeedItem() {
 
 // ---- Settings modal ----
 const NEWS_PRESETS = [
+  // News — general
   { label: 'NPR — Top Stories', url: 'https://feeds.npr.org/1001/rss.xml' },
+  { label: 'NPR — Home Page', url: 'https://feeds.npr.org/1002/rss.xml' },
+  { label: 'NPR — National', url: 'https://feeds.npr.org/1003/rss.xml' },
+  { label: 'NPR — World', url: 'https://feeds.npr.org/1004/rss.xml' },
   { label: 'BBC — World News', url: 'http://feeds.bbci.co.uk/news/world/rss.xml' },
+  { label: 'NYT — Home Page', url: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
+  { label: 'Sky News — World', url: 'https://feeds.skynews.com/feeds/rss/world.xml' },
+  { label: 'CNN — Top Stories', url: 'https://www.cnn.com/services/rss/' },
+  // Politics & Business
+  { label: 'NPR — Politics', url: 'https://feeds.npr.org/1014/rss.xml' },
+  { label: 'NPR — Business', url: 'https://feeds.npr.org/1006/rss.xml' },
+  { label: 'NPR — Economy', url: 'https://feeds.npr.org/1017/rss.xml' },
+  { label: 'NPR — Your Money', url: 'https://feeds.npr.org/1018/rss.xml' },
+  { label: 'BBC — Business', url: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
+  // Science & Tech
+  { label: 'NPR — Science', url: 'https://feeds.npr.org/1007/rss.xml' },
+  { label: 'NPR — Technology', url: 'https://feeds.npr.org/1019/rss.xml' },
+  { label: 'NPR — Space', url: 'https://feeds.npr.org/1026/rss.xml' },
+  { label: 'BBC — Science & Environment', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml' },
+  { label: 'BBC — Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml' },
   { label: 'The Verge — Tech', url: 'https://www.theverge.com/rss/index.xml' },
   { label: 'Ars Technica — Tech', url: 'https://feeds.arstechnica.com/arstechnica/index' },
+  { label: 'NASA — News', url: 'https://www.nasa.gov/feed/' },
+  { label: 'Space.com — All', url: 'https://www.space.com/feeds/all' },
+  // Health
+  { label: 'NPR — Healthcare', url: 'https://feeds.npr.org/1027/rss.xml' },
+  { label: 'NPR — Mental Health', url: 'https://feeds.npr.org/1029/rss.xml' },
+  { label: 'NPR — Global Health', url: 'https://feeds.npr.org/1031/rss.xml' },
+  { label: 'NPR — Children\'s Health', url: 'https://feeds.npr.org/1030/rss.xml' },
+  { label: 'BBC — Health', url: 'https://feeds.bbci.co.uk/news/health/rss.xml' },
+  // Environment & Education
+  { label: 'NPR — Environment', url: 'https://feeds.npr.org/1025/rss.xml' },
+  { label: 'NPR — Education', url: 'https://feeds.npr.org/1013/rss.xml' },
+  // Culture & Entertainment
+  { label: 'NPR — Culture', url: 'https://feeds.npr.org/1008/rss.xml' },
+  { label: 'NPR — Music', url: 'https://feeds.npr.org/1039/rss.xml' },
+  { label: 'NPR — Movies', url: 'https://feeds.npr.org/1045/rss.xml' },
+  { label: 'NPR — Books', url: 'https://feeds.npr.org/1032/rss.xml' },
+  { label: 'NPR — Pop Culture', url: 'https://feeds.npr.org/1048/rss.xml' },
+  { label: 'ESPN — Sports', url: 'https://www.espn.com/espn/rss/news' },
 ];
 function renderNewsFeeds() {
   const box = document.getElementById('news-feed-list');
