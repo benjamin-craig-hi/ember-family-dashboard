@@ -84,7 +84,7 @@ def _save_settings(s):
 # Config
 # ---------------------------------------------------------------------------
 DEFAULTS = {
-    "wake_word_model": "hey_jarvis_v0.1",  # base model; "Hey Jarvis"
+    "wake_word_model": "models/hey_ember.onnx",  # custom-trained "Hey Ember" model
     "wake_threshold": 0.6,                 # higher = fewer false triggers
     "wake_debounce_frames": 3,             # require N consecutive frames above threshold
     "cooldown_seconds": 5.0,               # ignore wake word for N sec after a response
@@ -925,8 +925,13 @@ def build_wake_model(cfg):
     model_name = cfg["wake_word_model"]
 
     # Support a direct path to a custom-trained model (e.g. "models/hey_ember.onnx").
-    if model_name.endswith(".onnx") and os.path.exists(model_name):
-        model_path = model_name
+    # Resolve relative paths against BASE_DIR so it works regardless of CWD.
+    if model_name.endswith(".onnx"):
+        candidate = model_name if os.path.isabs(model_name) else os.path.join(BASE_DIR, model_name)
+        if os.path.exists(candidate):
+            model_path = candidate
+        else:
+            raise RuntimeError(f"Wake word model {model_name} not found at {candidate}")
     else:
         paths = get_pretrained_model_paths()
         model_path = None
