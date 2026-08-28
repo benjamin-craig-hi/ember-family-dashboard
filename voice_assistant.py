@@ -22,6 +22,8 @@ import json
 import os
 import sys
 import time
+import urllib.request
+import urllib.parse
 from datetime import datetime
 
 import numpy as np
@@ -57,6 +59,8 @@ ASSISTANT_NAME = "Ember"
 
 CONFIG_PATH = os.path.join(BASE_DIR, "voice_config.json")
 DATA_DIR = os.path.join(BASE_DIR, "data")
+PHOTOS_DIR = os.path.join(BASE_DIR, "photos")
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 
 
 def _load_settings():
@@ -254,13 +258,49 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "update_settings",
-            "description": "Change one or more dashboard settings. Valid keys: assistant_name, tts_voice, location, time_format (12h/24h), date_format (weekday/numeric/long), temp_unit (F/C), notify_calendar (true/false), notify_news (true/false), notify_interval (seconds).",
+            "description": "Change one or more dashboard settings. Valid keys: assistant_name, tts_voice, location, time_format (12h/24h), date_format (weekday/numeric/long), temp_unit (F/C), notify_calendar (true/false), notify_news (true/false), notify_interval (seconds), screensaver_enabled (true/false), screensaver_idle_minutes (number).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "changes": {"type": "object", "description": "Map of setting key to new value"},
                 },
                 "required": ["changes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_photos",
+            "description": "List the photos and videos currently in the screensaver",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_photo",
+            "description": "Delete a photo or video from the screensaver by matching its filename",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "The photo/video filename (or a distinctive part of it) to delete"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "import_ical",
+            "description": "Import calendar events from a public iCal feed URL (e.g. a Google Calendar public link or school calendar)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The iCal (.ics) feed URL to import"},
+                },
+                "required": ["url"],
             },
         },
     },
@@ -362,10 +402,59 @@ def list_notes():
     return [{"text": n.get("text", "")} for n in notes]
 
 
+def list_photos():
+    """List photos/videos in the screensaver directory."""
+    if not os.path.isdir(PHOTOS_DIR):
+        return []
+    items = []
+    for fn in sorted(os.listdir(PHOTOS_DIR)):
+        if fn.startswith("."):
+            continue
+        p = os.path.join(PHOTOS_DIR, fn)
+        if os.path.isfile(p):
+            items.append({"name": fn, "size": os.path.getsize(p)})
+    return items
+
+
+def delete_photo(name):
+    """Delete a photo/video by substring match on filename. Returns count removed."""
+    if not os.path.isdir(PHOTOS_DIR):
+        return 0
+    t = name.strip().lower()
+    removed = 0
+    for fn in os.listdir(PHOTOS_DIR):
+        if t and t in fn.lower():
+            try:
+                os.remove(os.path.join(PHOTOS_DIR, fn))
+                removed += 1
+            except OSError:
+                pass
+    return removed
+
+
+def import_ical(url):
+    """Import events from a public iCal feed via the dashboard backend."""
+    url = (url or "").strip()
+    if not url:
+        return {"ok": False, "error": "no url"}
+    try:
+        data = json.dumps({"url": url}).encode("utf-8")
+        req = urllib.request.Request(
+            BACKEND_URL + "/api/calendar/import-ical",
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 # Valid settings keys the voice assistant may change (mirrors main.py DEFAULT_SETTINGS)
 _SETTING_KEYS = {
     "assistant_name", "tts_voice", "location", "time_format", "date_format",
     "temp_unit", "notify_calendar", "notify_news", "notify_email", "notify_interval",
+    "screensaver_enabled", "screensaver_idle_minutes",
 }
 
 
@@ -409,6 +498,12 @@ def run_tool(name, args):
         return json.dumps(list_chores())
     elif name == "list_notes":
         return json.dumps(list_notes())
+    elif name == "list_photos":
+        return json.dumps(list_photos())
+    elif name == "delete_photo":
+        return ("deleted" if delete_photo(args.get("name", "")) else "not_found")
+    elif name == "import_ical":
+        return json.dumps(import_ical(args.get("url", "")))
     elif name == "get_settings":
         return json.dumps(get_settings())
     elif name == "update_settings":
@@ -433,7 +528,7 @@ def confirmation_for(results):
             parts.append(phrases[name])
         elif name == "complete_chore" and status == "completed":
             parts.append(phrases["complete_chore"])
-        elif name in ("delete_note", "delete_chore", "delete_calendar_event"):
+        elif name in ("delete_note", "delete_chore", "delete_calendar_event", "delete_photo"):
             if status == "deleted":
                 parts.append("I deleted that.")
             else:
@@ -601,8 +696,11 @@ def ask_llm(text):
         "title, then use the matching delete tool with that exact title. For calendar events, resolve relative "
         f"dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year. "
         "When the user asks you to change a setting (like the assistant name, voice, location, time format, "
-        "temperature unit, or notification toggles), use the update_settings tool. When they ask what a setting "
-        "currently is, use the get_settings tool."
+        "temperature unit, notification toggles, or screensaver), use the update_settings tool. When they ask what a setting "
+        "currently is, use the get_settings tool. "
+        "When the user asks about the screensaver photos or videos, use the list_photos tool to see what's there, "
+        "and delete_photo to remove one (find the exact filename first). "
+        "When the user asks to import a calendar from a link or feed, use the import_ical tool with that URL."
     )
     messages = [
         {"role": "system", "content": system},
