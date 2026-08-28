@@ -1,8 +1,9 @@
 import json
 import os
+import re
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -75,6 +76,14 @@ DEFAULT_SETTINGS = {
     "assistant_name": "Ember",
     "wake_word": "Hey Jarvis",     # display only; wake-word model change is Phase 2
     "tts_voice": "af_heart",
+    # Notification feed
+    "notify_calendar": True,
+    "notify_news": False,
+    "notify_email": False,
+    "news_feed_url": "",
+    "notify_interval": 10,         # seconds between rotating feed items
+    # Calendar connections (configured now; sync is a later phase)
+    "calendar_connections": [],    # [{provider, url}]
 }
 
 
@@ -475,6 +484,99 @@ async def delete_member(index: int):
     family.pop(index)
     _save("family.json", family)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Notification feed (calendar events + optional RSS news)
+# ---------------------------------------------------------------------------
+def _resolve_day(day_str):
+    """Mirror the frontend resolveDay(): free-text day -> date (or None)."""
+    s = str(day_str or "").strip().lower()
+    if not s:
+        return None
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)
+    if m:
+        return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).date()
+    today = datetime.now().date()
+    if s == "today":
+        return today
+    if s == "tomorrow":
+        return today + timedelta(days=1)
+    if s == "yesterday":
+        return today - timedelta(days=1)
+    days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    if s in days:
+        idx = days.index(s)
+        diff = idx - today.weekday()
+        if diff < 0:
+            diff += 7
+        return today + timedelta(days=diff)
+    return None
+
+
+def _clean_xml_text(text):
+    """Strip CDATA wrappers and any remaining tags from an XML text node."""
+    text = re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", text, flags=re.S)
+    text = re.sub(r"<[^>]+>", "", text)
+    return text.strip()
+
+
+def _fetch_rss(url, limit=5):
+    """Fetch an RSS/Atom feed and return a list of {title, link}."""
+    req = urllib.request.Request(url, headers={"User-Agent": "Ember/1.0"})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        xml = r.read().decode("utf-8", "ignore")
+    items = re.findall(r"<item>(.*?)</item>", xml, re.S)
+    if not items:
+        items = re.findall(r"<entry>(.*?)</entry>", xml, re.S)
+    out = []
+    for it in items:
+        t = re.search(r"<title[^>]*>(.*?)</title>", it, re.S)
+        l = re.search(r"<link[^>]*href=[\"'](.*?)[\"']", it, re.S) or re.search(r"<link[^>]*>(.*?)</link>", it, re.S)
+        if t:
+            title = _clean_xml_text(t.group(1))
+            if title:
+                out.append({
+                    "title": title,
+                    "link": (l.group(1).strip() if l else ""),
+                })
+        if len(out) >= limit:
+            break
+    return out
+
+
+@app.get("/api/notifications")
+def get_notifications():
+    s = _load_settings()
+    feed = []
+
+    # 1. Upcoming calendar events (next 7 days)
+    if s.get("notify_calendar", True):
+        events = _load("calendar.json", [])
+        today = datetime.now().date()
+        for e in events:
+            d = _resolve_day(e.get("day", ""))
+            if d and today <= d <= today + timedelta(days=7):
+                label = "Today" if d == today else ("Tomorrow" if d == today + timedelta(days=1) else d.strftime("%A"))
+                feed.append({
+                    "type": "calendar",
+                    "icon": "📅",
+                    "text": f"{label}: {e.get('title', '')}" + (f" at {e['time']}" if e.get("time") else ""),
+                })
+
+    # 2. News feed (optional RSS)
+    if s.get("notify_news") and s.get("news_feed_url"):
+        try:
+            for item in _fetch_rss(s["news_feed_url"], 5):
+                feed.append({"type": "news", "icon": "📰", "text": item["title"], "link": item["link"]})
+        except Exception:
+            feed.append({"type": "news", "icon": "📰", "text": "News feed unavailable"})
+
+    # 3. Email notifications (placeholder — no email integration yet)
+    if s.get("notify_email"):
+        feed.append({"type": "email", "icon": "✉️", "text": "Email notifications coming soon"})
+
+    return {"ok": True, "items": feed, "interval": s.get("notify_interval", 10)}
 
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"), html=True), name="static")

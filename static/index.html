@@ -9,19 +9,27 @@
   * { box-sizing:border-box; margin:0; padding:0; }
   html, body { height:100%; }
   body { background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
-  header { padding:14px 24px; border-bottom:1px solid #262a33; display:flex; align-items:center; gap:16px; }
-  .header-left { display:flex; align-items:baseline; gap:12px; font-size:1.6rem; font-weight:700; }
+  header { padding:14px 24px; border-bottom:1px solid #262a33; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:16px; }
+  .header-left { display:flex; align-items:baseline; gap:12px; font-size:1.6rem; font-weight:700; justify-self:start; }
   .header-left .brand { color:var(--accent); }
   .header-left .title { color:var(--text); }
   .header-left .tagline { font-size:1.05rem; font-weight:400; color:#eab676; font-style:italic; font-family:Georgia,'Times New Roman',serif; letter-spacing:0.01em; text-shadow:0 0 14px rgba(255,160,60,0.35), 0 0 2px rgba(255,180,90,0.25); }
-  .header-center { flex:1; display:flex; justify-content:center; }
-  .header-right { display:flex; align-items:center; gap:14px; }
+  .header-center { justify-self:center; }
+  .header-right { display:flex; align-items:center; gap:14px; justify-self:end; }
 
-  /* ---- Weather + clock + settings (in header) ---- */
-  .weather { display:flex; align-items:center; gap:10px; }
-  .weather .wicon { font-size:1.5rem; }
-  .weather .wtemp { font-size:1.25rem; font-weight:700; }
-  .weather .wmeta { color:var(--muted); font-size:.82rem; line-height:1.25; }
+  /* ---- Weather (centered) ---- */
+  .weather { display:flex; align-items:center; gap:12px; }
+  .weather .wicon { font-size:2.3rem; line-height:1; }
+  .weather .wbody { display:flex; flex-direction:column; }
+  .weather .wtemp { font-size:1.7rem; font-weight:700; color:var(--text); line-height:1.1; }
+  .weather .whilo { font-size:1.05rem; color:#eab676; font-family:Georgia,'Times New Roman',serif; font-style:italic; text-shadow:0 0 12px rgba(255,160,60,0.35); }
+
+  /* ---- Notification feed ---- */
+  .feed { display:flex; align-items:center; gap:8px; max-width:340px; background:#1a1d24; border:1px solid #262a33; border-radius:20px; padding:8px 14px; }
+  .feed .feed-icon { font-size:1.1rem; flex:none; }
+  .feed .feed-text { color:var(--muted); font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:opacity .3s ease; }
+  .feed .feed-text.fade { opacity:0; }
+
   .clock { text-align:right; }
   .clock .ctime { font-size:1.35rem; font-weight:700; color:var(--text); }
   .clock .cdate { color:var(--muted); font-size:.85rem; }
@@ -79,6 +87,12 @@
   .member-row input[type=text] { flex:1; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:8px; font-size:.95rem; }
   .member-row input[type=color] { width:40px; height:36px; border:none; background:none; cursor:pointer; padding:0; }
   .member-row .del { background:#3a2a2a; color:#ff8a8a; border:1px solid #5a3a3a; border-radius:8px; width:36px; height:36px; cursor:pointer; font-size:1rem; }
+  .field label.check { display:flex; align-items:center; gap:8px; color:var(--text); font-size:.95rem; cursor:pointer; }
+  .field label.check input[type=checkbox] { width:18px; height:18px; accent-color:var(--accent); cursor:pointer; }
+  .calconn-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .calconn-row select { flex:1; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:8px; font-size:.95rem; }
+  .calconn-row input[type=text] { flex:2; background:#22262f; border:1px solid #333a46; color:var(--text); border-radius:8px; padding:8px; font-size:.95rem; }
+  .calconn-row .del { background:#3a2a2a; color:#ff8a8a; border:1px solid #5a3a3a; border-radius:8px; width:36px; height:36px; cursor:pointer; font-size:1rem; }
   .btn { background:var(--accent); color:#111; border:none; border-radius:8px; padding:10px 16px; font-weight:700; cursor:pointer; }
   .btn.ghost { background:#2a2f3a; color:var(--text); border:1px solid #333a46; }
   .settings-actions { display:flex; gap:10px; margin-top:20px; justify-content:flex-end; }
@@ -151,11 +165,17 @@
   <div class="header-center">
     <div class="weather" id="weather">
       <span class="wicon" id="w-icon">—</span>
-      <span class="wtemp" id="w-temp">—</span>
-      <span class="wmeta" id="w-meta">Loading weather…</span>
+      <div class="wbody">
+        <span class="wtemp" id="w-temp">—</span>
+        <span class="whilo" id="w-hilo">—</span>
+      </div>
     </div>
   </div>
   <div class="header-right">
+    <div class="feed" id="feed" style="display:none">
+      <span class="feed-icon" id="feed-icon">📅</span>
+      <span class="feed-text" id="feed-text">—</span>
+    </div>
     <div class="clock">
       <div class="ctime" id="clock-time">—:—</div>
       <div class="cdate" id="clock-date">—</div>
@@ -262,6 +282,29 @@
       <label>Wake word (display only — voice wake word change is coming in Phase 2)</label>
       <input id="set-wakeword" placeholder="Hey Jarvis">
     </div>
+
+    <h3>Notification feed</h3>
+    <div class="field">
+      <label class="check"><input type="checkbox" id="set-notify-cal"> Show upcoming calendar events</label>
+    </div>
+    <div class="field">
+      <label class="check"><input type="checkbox" id="set-notify-news"> Show news feed (RSS)</label>
+    </div>
+    <div class="field">
+      <label>News feed URL (RSS/Atom)</label>
+      <input id="set-news-url" placeholder="https://example.com/feed.xml">
+    </div>
+    <div class="field">
+      <label class="check"><input type="checkbox" id="set-notify-email"> Show email notifications (coming soon)</label>
+    </div>
+    <div class="field">
+      <label>Rotation speed (seconds)</label>
+      <input id="set-notify-interval" type="number" min="3" max="60" placeholder="10">
+    </div>
+
+    <h3>Calendar connections</h3>
+    <div id="cal-conn-list"></div>
+    <button class="btn ghost" onclick="addCalConn()">+ Add calendar connection</button>
 
     <div class="settings-actions">
       <button class="btn ghost" onclick="closeSettings()">Cancel</button>
@@ -647,13 +690,13 @@ async function loadWeather() {
   try {
     const r = await fetch('/api/weather');
     const d = await r.json();
-    if (!d.ok) { document.getElementById('w-meta').textContent = 'Weather unavailable'; return; }
+    if (!d.ok) { document.getElementById('w-hilo').textContent = 'Weather unavailable'; return; }
     document.getElementById('w-icon').textContent = wmoIcon(d.code);
     document.getElementById('w-temp').textContent = Math.round(d.temp) + '°' + d.unit;
-    document.getElementById('w-meta').textContent =
-      d.location + ' · H ' + Math.round(d.today_high) + '° / L ' + Math.round(d.today_low) + '°';
+    document.getElementById('w-hilo').textContent =
+      'H ' + Math.round(d.today_high) + '° / L ' + Math.round(d.today_low) + '°';
   } catch (e) {
-    document.getElementById('w-meta').textContent = 'Weather unavailable';
+    document.getElementById('w-hilo').textContent = 'Weather unavailable';
   }
 }
 
@@ -661,6 +704,40 @@ async function loadSettings() {
   const r = await fetch('/api/settings');
   _settings = await r.json();
   tickClock();
+}
+
+// ---- Notification feed (rotating) ----
+let _feedItems = [];
+let _feedIdx = 0;
+let _feedTimer = null;
+async function loadNotifications() {
+  try {
+    const r = await fetch('/api/notifications');
+    const d = await r.json();
+    if (!d.ok) return;
+    _feedItems = d.items || [];
+    _feedIdx = 0;
+    const el = document.getElementById('feed');
+    if (_feedItems.length === 0) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    showFeedItem();
+    const interval = (d.interval || 10) * 1000;
+    if (_feedTimer) clearInterval(_feedTimer);
+    _feedTimer = setInterval(showFeedItem, interval);
+  } catch (e) {}
+}
+function showFeedItem() {
+  if (_feedItems.length === 0) return;
+  const item = _feedItems[_feedIdx % _feedItems.length];
+  _feedIdx++;
+  const icon = document.getElementById('feed-icon');
+  const text = document.getElementById('feed-text');
+  text.classList.add('fade');
+  setTimeout(() => {
+    icon.textContent = item.icon || '📅';
+    text.textContent = item.text;
+    text.classList.remove('fade');
+  }, 300);
 }
 
 // ---- Settings modal ----
@@ -671,10 +748,50 @@ function openSettings() {
   document.getElementById('set-tempunit').value = _settings.temp_unit || 'F';
   document.getElementById('set-assistant').value = _settings.assistant_name || 'Ember';
   document.getElementById('set-wakeword').value = _settings.wake_word || 'Hey Jarvis';
+  document.getElementById('set-notify-cal').checked = !!_settings.notify_calendar;
+  document.getElementById('set-notify-news').checked = !!_settings.notify_news;
+  document.getElementById('set-notify-email').checked = !!_settings.notify_email;
+  document.getElementById('set-news-url').value = _settings.news_feed_url || '';
+  document.getElementById('set-notify-interval').value = _settings.notify_interval || 10;
   renderMemberRows();
+  renderCalConns();
   document.getElementById('settings').classList.add('show');
 }
 function closeSettings() { document.getElementById('settings').classList.remove('show'); }
+
+// ---- Calendar connections ----
+const CAL_PROVIDERS = ['Google Calendar', 'iCloud', 'Outlook', 'CalDAV', 'iCal feed'];
+function renderCalConns() {
+  const box = document.getElementById('cal-conn-list');
+  const conns = _settings.calendar_connections || [];
+  box.innerHTML = conns.map((c, i) => {
+    const opts = CAL_PROVIDERS.map(p =>
+      '<option value="' + esc(p) + '"' + (c.provider === p ? ' selected' : '') + '>' + esc(p) + '</option>'
+    ).join('');
+    return '<div class="calconn-row">' +
+      '<select onchange="calConnChange(' + i + ', \'provider\', this.value)">' + opts + '</select>' +
+      '<input type="text" placeholder="Calendar URL" value="' + esc(c.url || '') + '" onchange="calConnChange(' + i + ', \'url\', this.value)">' +
+      '<button class="del" onclick="calConnDelete(' + i + ')">✕</button>' +
+      '</div>';
+  }).join('');
+}
+function addCalConn() {
+  const conns = (_settings.calendar_connections || []).slice();
+  conns.push({ provider: 'Google Calendar', url: '' });
+  _settings.calendar_connections = conns;
+  renderCalConns();
+}
+function calConnChange(i, key, val) {
+  const conns = (_settings.calendar_connections || []).slice();
+  if (conns[i]) conns[i][key] = val;
+  _settings.calendar_connections = conns;
+}
+function calConnDelete(i) {
+  const conns = (_settings.calendar_connections || []).slice();
+  conns.splice(i, 1);
+  _settings.calendar_connections = conns;
+  renderCalConns();
+}
 
 function renderMemberRows() {
   const box = document.getElementById('member-list');
@@ -731,6 +848,12 @@ async function saveSettings() {
     temp_unit: document.getElementById('set-tempunit').value,
     assistant_name: document.getElementById('set-assistant').value,
     wake_word: document.getElementById('set-wakeword').value,
+    notify_calendar: document.getElementById('set-notify-cal').checked,
+    notify_news: document.getElementById('set-notify-news').checked,
+    notify_email: document.getElementById('set-notify-email').checked,
+    news_feed_url: document.getElementById('set-news-url').value,
+    notify_interval: parseInt(document.getElementById('set-notify-interval').value, 10) || 10,
+    calendar_connections: _settings.calendar_connections || [],
   };
   // geocode the location to lat/lon
   try {
@@ -745,6 +868,7 @@ async function saveSettings() {
   closeSettings();
   await loadSettings();
   loadWeather();
+  loadNotifications();
 }
 
 // ---- Milestone celebration ----
@@ -779,13 +903,14 @@ function celebrate(emoji, msg) {
 }
 
 initCalView();
-loadSettings();
+loadSettings().then(() => loadNotifications());
 loadMilestones();
 refreshAll();
 tickClock();
 setInterval(tickClock, 1000);
 loadWeather();
 setInterval(loadWeather, 600000);   // refresh weather every 10 min
+setInterval(loadNotifications, 300000);  // refresh feed every 5 min
 // Auto-refresh: poll for changes so entries added by the agent (chat or voice)
 // appear without a manual F5. Diff-aware loaders prevent flicker on no-change polls.
 setInterval(refreshAll, 3000);
