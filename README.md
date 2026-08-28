@@ -34,7 +34,7 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
 - **Chat box** — type a request ("Ask Ember…") and the assistant can add, list,
   and delete notes, chores, and calendar events via tool calling.
 
-### Star-Powered Rewards (Phase 1)
+### Star-Powered Rewards
 - Chores carry **star values** and an **assignee**.
 - Checking off a chore **awards stars** to that member (idempotent — re-checking
   doesn't double-award).
@@ -52,19 +52,19 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
   events (next 7 days), RSS news (multi-feed, 35+ presets), and (soon) email.
   Rotation speed is configurable.
 
-### Photo & video screensaver (Phase 3)
+### Photo & video screensaver
 - After a configurable idle period (default 5 min), the board fades into a
   full-screen carousel of your photos and videos (images + autoplay-muted
   looping video).
 - Upload and delete media from Settings. Media lives in `photos/` (git-ignored).
 
-### Calendar sync & views (Phase 4)
+### Calendar sync & views
 - **iCal feed import** — paste a public calendar feed URL (Google Calendar
   public link, iCloud, Outlook, CalDAV, etc.) and Ember imports the events,
   deduplicating by UID.
 - **Month / week / day** views with a one-tap toggle.
 
-### Home management (Phase 5)
+### Home management
 - **Shared grocery list** — a dedicated mobile page (`/grocery.html`) any phone
   on the LAN can open, with tap-to-check, add, and delete.
 - **Custom lists** — create any named list (packing, wishlist, etc.).
@@ -73,7 +73,7 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
 - **Sleep mode** — set a sleep window; the screen dims during those hours
   (including overnight windows that cross midnight).
 
-### "Calendar Plus" AI (Phase 6)
+### "Calendar Plus" AI
 - **Meal planning** — a dedicated `/meals.html` page with a 7-day editable plan
   and an **✨ Suggest** button that asks the LLM to propose a week of dinners
   (honoring preferences like "no beef, quick meals").
@@ -90,7 +90,7 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
   rotation speed.
 - **Calendar connections** — add/remove connections (Google Calendar, iCloud,
   Outlook, CalDAV, iCal feed) with URLs. *(Config layer + iCal import — full
-  two-way sync is a later phase.)*
+  two-way sync is planned.)*
 - **Screensaver** — enable/disable, idle timer, photo manager.
 - **Home management** — PIN, sleep window, countdowns, lists.
 
@@ -166,16 +166,16 @@ roadmap.
 
 ## Roadmap
 
-Shipped (Phases 1–6, self-contained parts):
+Shipped:
 
-- ✅ **Phase 1 — Star-Powered Rewards**
-- ✅ **Phase 2 — Motivation Mode** (milestone celebrations, settings UI, top
+- ✅ **Star-Powered Rewards**
+- ✅ **Motivation Mode** (milestone celebrations, settings UI, top
   bar, notification feed, voice/wake-name selector)
-- ✅ **Phase 3 — Photo & Video Screensaver**
-- ✅ **Phase 4 — Calendar Sync & Views** (iCal import + month/week/day)
-- ✅ **Phase 5 — Home Management Extras** (grocery + custom lists, PIN lock,
+- ✅ **Photo & Video Screensaver**
+- ✅ **Calendar Sync & Views** (iCal import + month/week/day)
+- ✅ **Home Management Extras** (grocery + custom lists, PIN lock,
   countdowns, sleep mode)
-- ✅ **Phase 6 — "Calendar Plus" AI** (meal planning + grocery export)
+- ✅ **"Calendar Plus" AI** (meal planning + grocery export)
 
 In progress / TODO:
 
@@ -208,7 +208,7 @@ In progress / TODO:
 - `record_wakeword.py` — records clips to train a custom wake word (optional)
 - `scripts/reload-kiosk.sh` — restarts the kiosk browser (used by the git hook)
 - `hooks/post-merge` — git hook that auto-reloads the kiosk browser on `git pull`
-- `docs/plans/` — roadmap and phase plans
+- `docs/plans/` — roadmap and plans
 - `docs/screenshots/` — dashboard and settings screenshots
 
 ## Setup
