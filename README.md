@@ -8,8 +8,8 @@ heart of the home — no cloud, no subscription, no lock-in.
 
 Runs on a CPU-only Linux kiosk (no GPU, no telephony, no cloud). Wake word → mic
 → STT → LLM → TTS, plus a touch-friendly on-screen keyboard and a full family
-board: calendar, chores, notes, star-powered rewards, live weather, and a
-rotating notification feed.
+board: calendar, chores, notes, star-powered rewards, live weather, a rotating
+notification feed, a photo screensaver, shared lists, and meal planning.
 
 Everything runs on-device. The only optional network hops are the LLM, the
 weather (Open-Meteo, no API key), and an optional RSS news feed. The LLM can run
@@ -26,13 +26,13 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
 ## Features
 
 ### Family board
-- **Month-view calendar** as the main pane (takes ~3/4 of the screen), with
-  day/week/month navigation and a "today" highlight.
+- **Month/week/day calendar** as the main pane (takes ~3/4 of the screen), with
+  day/week/month navigation, a "today" highlight, and color-coded events.
 - **Chores** — checkable tasks with star values and a colored assignee chip per
-  family member.
+  family member. Click any chore or event to edit it.
 - **Notes** — a shared scratchpad.
-- **Chat box** — type a request ("Ask Ember…") and the assistant can add notes,
-  chores, and calendar events via tool calling.
+- **Chat box** — type a request ("Ask Ember…") and the assistant can add, list,
+  and delete notes, chores, and calendar events via tool calling.
 
 ### Star-Powered Rewards (Phase 1)
 - Chores carry **star values** and an **assignee**.
@@ -45,30 +45,63 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
 
 ### Top bar
 - **Live weather** — current temp, condition icon, and today's high/low, centered
-  in the header. Sourced from Open-Meteo (no API key). Location is configured in
-  settings.
+  in the header. Sourced from Open-Meteo (no API key). Day/night-aware icons
+  (moon phases after sunset). Location is configured in settings.
 - **Live clock** — 12h or 24h, with three date formats.
-- **Notification feed** — a rotating one-line pill that cycles through upcoming
-  calendar events (next 7 days), an optional RSS news feed, and (soon) email.
+- **Notification feed** — a rotating pill that cycles through upcoming calendar
+  events (next 7 days), RSS news (multi-feed, 35+ presets), and (soon) email.
   Rotation speed is configurable.
+
+### Photo & video screensaver (Phase 3)
+- After a configurable idle period (default 5 min), the board fades into a
+  full-screen carousel of your photos and videos (images + autoplay-muted
+  looping video).
+- Upload and delete media from Settings. Media lives in `photos/` (git-ignored).
+
+### Calendar sync & views (Phase 4)
+- **iCal feed import** — paste a public calendar feed URL (Google Calendar
+  public link, iCloud, Outlook, CalDAV, etc.) and Ember imports the events,
+  deduplicating by UID.
+- **Month / week / day** views with a one-tap toggle.
+
+### Home management (Phase 5)
+- **Shared grocery list** — a dedicated mobile page (`/grocery.html`) any phone
+  on the LAN can open, with tap-to-check, add, and delete.
+- **Custom lists** — create any named list (packing, wishlist, etc.).
+- **Parental PIN lock** — set a 4-digit PIN; opening Settings then requires it.
+- **Event countdowns** — named events with a date, showing "X days" / "today".
+- **Sleep mode** — set a sleep window; the screen dims during those hours
+  (including overnight windows that cross midnight).
+
+### "Calendar Plus" AI (Phase 6)
+- **Meal planning** — a dedicated `/meals.html` page with a 7-day editable plan
+  and an **✨ Suggest** button that asks the LLM to propose a week of dinners
+  (honoring preferences like "no beef, quick meals").
+- **Grocery list export** — one tap to share the list via the phone's native
+  share sheet, clipboard, or a plain-text download (replaces Instacart).
 
 ### Settings (⚙️)
 - **Family members** — add, rename, recolor (color picker), and delete. Colors
   flow through to chore chips and the reward picker.
 - **Location** — auto-geocoded for weather.
 - **Date & time** — 12h/24h, three date formats, °F/°C.
-- **Assistant** — name and wake word.
-- **Notification feed** — toggle calendar/news/email, set the news URL, set
+- **Assistant** — name, wake word, and TTS voice (20 Kokoro voices).
+- **Notification feed** — toggle calendar/news/email, multi-feed selection,
   rotation speed.
 - **Calendar connections** — add/remove connections (Google Calendar, iCloud,
-  Outlook, CalDAV, iCal feed) with URLs. *(Config layer only — actual sync is a
-  later phase.)*
+  Outlook, CalDAV, iCal feed) with URLs. *(Config layer + iCal import — full
+  two-way sync is a later phase.)*
+- **Screensaver** — enable/disable, idle timer, photo manager.
+- **Home management** — PIN, sleep window, countdowns, lists.
 
 ### Voice assistant
-- **"Hey Jarvis"** wake word, then speak a command. It can add notes, chores,
-  and calendar events by voice, and speaks back as **Ember**.
+- **"Hey Jarvis"** wake word, then speak a command. It can add, list, and delete
+  notes, chores, calendar events, grocery items, and photos; read and set the
+  meal plan; import iCal feeds; and adjust settings — all by voice. It speaks
+  back as **Ember**.
 - The assistant name and TTS voice are read from the shared settings, so
   renaming it in the UI flows through to the voice.
+- A **"Hey Ember"** wake word is in training (see [Roadmap](#roadmap)).
 
 ### On-screen keyboard
 - A built-in touch keyboard, because GNOME's OSK is unreliable with snap
@@ -131,13 +164,44 @@ Google, Mistral, OpenRouter, etc.) and Ember will route chat and voice to that
 cloud API instead of a local model. This is not implemented yet — it's on the
 roadmap.
 
+## Roadmap
+
+Shipped (Phases 1–6, self-contained parts):
+
+- ✅ **Phase 1 — Star-Powered Rewards**
+- ✅ **Phase 2 — Motivation Mode** (milestone celebrations, settings UI, top
+  bar, notification feed, voice/wake-name selector)
+- ✅ **Phase 3 — Photo & Video Screensaver**
+- ✅ **Phase 4 — Calendar Sync & Views** (iCal import + month/week/day)
+- ✅ **Phase 5 — Home Management Extras** (grocery + custom lists, PIN lock,
+  countdowns, sleep mode)
+- ✅ **Phase 6 — "Calendar Plus" AI** (meal planning + grocery export)
+
+In progress / TODO:
+
+- 🚧 **"Hey Ember" wake word** — custom wake-word model in training; will replace
+  "Hey Jarvis" once deployed.
+- 🚧 **BYOK cloud API** — bring-your-own-key routing for chat/voice.
+- ⬜ **Two-way calendar sync** — Google OAuth, iCloud/CalDAV, and Outlook/Graph
+  push/pull (needs per-provider credentials).
+- ⬜ **Email notification feed** — surface inbox items in the rotating feed
+  (needs email account credentials).
+- ⬜ **Magic Import** — forward a flyer/PDF/email and auto-populate events
+  (needs email ingestion + a vision/PDF model).
+- ⬜ **AI recipe bank** — snap a photo of a recipe and auto-categorize it (needs
+  a vision model).
+- ⬜ **Syncthing photo sync** — watch a Syncthing folder so photos appear in the
+  screensaver automatically (the upload endpoint is the current fallback).
+
 ## Files
 
 - `main.py` — FastAPI dashboard (board + chat + tool calling + weather +
-  notifications + settings + rewards)
+  notifications + settings + rewards + photos + lists + meals + iCal import)
 - `voice_assistant.py` — the standalone voice loop (wake → VAD → STT → LLM → TTS)
 - `static/index.html` — the dashboard UI (calendar, chores, notes, rewards,
   weather, clock, notification feed, settings, on-screen keyboard)
+- `static/grocery.html` — mobile grocery list page
+- `static/meals.html` — meal planning page
 - `jarvis-voice.service` — systemd **user** service for the voice loop
 - `record_wakeword.py` — records clips to train a custom wake word (optional)
 - `docs/plans/` — roadmap and phase plans
@@ -167,8 +231,8 @@ pip install --force-reinstall \
 pip install "transformers==4.46.3" "huggingface-hub>=1.5.0,<2.0" "tokenizers>=0.22.0,<=0.23.0"
 ```
 
-> The weather and notification feed use only the Python standard library
-> (`urllib`, `re`, `json`) — no extra dependencies.
+> The weather, notification feed, photo upload, and iCal parser use only the
+> Python standard library (`urllib`, `re`, `json`) — no extra dependencies.
 
 ### 3. Configure the LLM
 
@@ -212,13 +276,14 @@ systemctl --user enable --now jarvis-voice.service
 ## Notes
 
 - The wake word is "Hey Jarvis" (not bare "Jarvis"). A "Hey Ember" wake word is
-  planned for a later phase (it needs custom wake-word training).
+  in training (see [Roadmap](#roadmap)).
 - First wake-word trigger after boot is slow (model warm-up); later ones are
   snappy.
 - Kokoro downloads `en-core-web-sm` (spaCy) and the 82M model on first use.
 - The `af_heart` TTS voice is female/warm; `am_michael`/`am_adam` are male.
-- Runtime data (calendar, chores, notes, family, rewards, milestones, settings)
-  lives in `data/` and is git-ignored — family data is never committed.
+- Runtime data (calendar, chores, notes, family, rewards, milestones, settings,
+  lists, meals) lives in `data/` and is git-ignored — family data is never
+  committed. Photos/videos live in `photos/` and are also git-ignored.
 
 ## License
 
