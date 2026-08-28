@@ -11,9 +11,11 @@ Runs on a CPU-only Linux kiosk (no GPU, no telephony, no cloud). Wake word → m
 board: calendar, chores, notes, star-powered rewards, live weather, and a
 rotating notification feed.
 
-Everything runs on-device. The only optional network hops are the LLM (which can
-be offloaded to a GPU workstation on the LAN via `OLLAMA_HOST`), the weather
-(Open-Meteo, no API key), and an optional RSS news feed.
+Everything runs on-device. The only optional network hops are the LLM, the
+weather (Open-Meteo, no API key), and an optional RSS news feed. The LLM can run
+three ways — offloaded to a GPU box on the LAN (the default), fully local on the
+kiosk, or (soon) a bring-your-own-key cloud API. See
+[LLM deployment](#llm-deployment).
 
 ## Screenshots
 
@@ -89,6 +91,46 @@ be offloaded to a GPU workstation on the LAN via `OLLAMA_HOST`), the weather
 | Weather | Open-Meteo (no API key) |
 | News feed | RSS/Atom (stdlib parser) |
 
+## LLM deployment
+
+Ember's chat and voice features need an LLM. There are three ways to run it,
+depending on your hardware.
+
+### A. LAN offload (the default setup)
+
+The kiosk is a low-power, CPU-only machine, so the model runs on a **second
+computer on your network** — a GPU workstation — and the kiosk talks to it over
+the LAN. This is the setup the project was built around: the kiosk stays cheap
+and quiet, and the heavy lifting happens on a machine that already has a GPU.
+
+```bash
+# on the GPU box: bind Ollama to the network
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+
+# on the kiosk: point at the GPU box
+OLLAMA_HOST=http://<gpu-box-ip>:11434
+```
+
+> **Dependency note:** in this mode the dashboard and voice assistant depend on
+> that second machine being on and reachable. If it's off, chat and voice
+> commands won't get a response — but the rest of the board (calendar, chores,
+> notes, weather) keeps working.
+
+### B. Fully local (single machine)
+
+If your kiosk hardware can handle it, you can run Ollama directly on the same
+machine and skip the second computer entirely. Install Ollama on the kiosk and
+leave `OLLAMA_HOST` at the default `http://localhost:11434`. A smaller model
+(e.g. `qwen3:4b` or `llama3.2:3b`) keeps it responsive on modest hardware.
+
+### C. Bring-your-own-key (BYOK) cloud — *in the works*
+
+For anyone who'd rather not run a model locally at all, a BYOK option is
+planned: plug in an API key for whatever provider you like (OpenAI, Anthropic,
+Google, Mistral, OpenRouter, etc.) and Ember will route chat and voice to that
+cloud API instead of a local model. This is not implemented yet — it's on the
+roadmap.
+
 ## Files
 
 - `main.py` — FastAPI dashboard (board + chat + tool calling + weather +
@@ -140,12 +182,11 @@ directory (a tiny stdlib loader — no extra dependency). Values in `.env` are
 read into the environment but **never override** a variable that's already set,
 so a systemd `Environment=` line or a real shell export still wins.
 
-The dashboard defaults to `http://localhost:11434`. To offload the model to a
-GPU box on the LAN, set `OLLAMA_HOST` to that machine's address and make sure
-its Ollama binds to the network (`OLLAMA_HOST=0.0.0.0:11434`).
-
 `.env` is git-ignored, so each machine keeps its own copy and repo updates
 never clobber it.
+
+See [LLM deployment](#llm-deployment) for the three ways to run the model
+(LAN offload, fully local, or BYOK cloud).
 
 ### 4. Run
 
