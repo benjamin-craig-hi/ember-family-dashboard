@@ -272,11 +272,12 @@ def tool_format(settings):
 def assistant_message(content, tool_calls, fmt):
     """Build the assistant-turn message dict for the given tool format."""
     if fmt == "ollama":
+        # Ollama Python client expects arguments as dict, not JSON string
         return {
             "role": "assistant",
             "content": content or "",
             "tool_calls": [
-                {"function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
+                {"function": {"name": tc.name, "arguments": tc.arguments}}
                 for tc in tool_calls
             ],
         }

@@ -95,6 +95,8 @@ DEFAULTS = {
     "custom_verifier": None,  # path to trained .joblib verifier (unused for Ember)
     "custom_verifier_threshold": 0.5,
     "announce_ready": True,
+    "followup_seconds": 8.0,       # after Ember speaks, keep listening this long for a follow-up
+    "max_conversation_turns": 6,   # max user utterances per wake word
 }
 
 
@@ -822,15 +824,22 @@ def transcribe(audio_np, model_name="moonshine/tiny"):
 # ---------------------------------------------------------------------------
 # LLM (routed via llm.py: local Ollama, or a cloud API)
 # ---------------------------------------------------------------------------
-def ask_llm(text):
+def _build_system_prompt():
     today = datetime.now().strftime("%A, %B %d, %Y")
     settings = _load_settings()
     name = settings.get("assistant_name") or ASSISTANT_NAME
-    fmt = llm.tool_format(settings)
-    system = (
+    return (
         f"Today is {today}. You are {name}, the warm, self-hosted family assistant — the light from within the home. "
         "You help the family stay organized and connected. "
+        "You are speaking out loud through a speaker, in a real conversation. The user may respond to "
+        " anything you say, so a reply is never necessarily the end of the exchange. "
         "Answer in one short sentence, in plain spoken language. No emoji, no lists. "
+        "If you need more information to carry out a request — for example which day, which item, or which "
+        "family member — ask a short clarifying question instead of guessing. When the user answers, use that answer. "
+        "CRITICAL: You are commanded through a speech recognizer, so the user's words appear as a raw "
+        "transcript that may contain mishearings. If a request is ambiguous or a tool fails, ask the user "
+        "to confirm or repeat. Never assume a tool succeeded silently; treat the tool result as your source "
+        "of truth and say what actually happened. "
         "When the user asks you to add a note, chore, or calendar event, use the "
         "appropriate tool to actually save it. When the user asks you to delete, remove, or edit "
         "a note, chore, or calendar event, first use the matching list tool to find the exact "
@@ -849,29 +858,54 @@ def ask_llm(text):
         "When the user asks about the meal plan, use get_meal_plan to read it, set_meal to set a specific day's meal, "
         "or suggest_meals to propose a weekly plan."
     )
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": text},
-    ]
-    last_results = []
-    for _ in range(4):  # allow up to 4 tool rounds (list -> delete -> confirm)
-        resp = llm.chat(messages, settings=settings, tools=TOOLS)
-        tool_calls = resp.tool_calls
-        if not tool_calls:
-            return resp.content or ""
-        # Append the assistant's tool-call turn
-        messages.append(llm.assistant_message(resp.content, tool_calls, fmt))
-        # Execute each tool and append its result
+
+
+class Conversation:
+    """Holds the running message history for one wake-word session.
+
+   multi-turn: after Ember speaks, the loop can feed the next user
+    utterance into the same Conversation so clarifications ("which day?",
+    "did you mean tomorrow?") work without re-waking.
+    """
+
+    def __init__(self):
+        self.messages = [{"role": "system", "content": _build_system_prompt()}]
+
+    def ask(self, text):
+        """Send one user utterance, run any tool rounds, return the spoken reply."""
+        settings = _load_settings()
+        fmt = llm.tool_format(settings)
+        self.messages.append({"role": "user", "content": text})
         last_results = []
-        for tc in tool_calls:
-            name = tc.name
-            args = tc.arguments
-            print(f"[tool] {name}({args})", flush=True)
-            status = run_tool(name, args)
-            last_results.append((name, status))
-            messages.append(llm.tool_result_message(tc, status, fmt))
-    # If we exhausted rounds, fall back to a confirmation phrase
-    return confirmation_for(last_results)
+        for _ in range(4):  # allow up to 4 tool rounds (list -> delete -> confirm)
+            try:
+                resp = llm.chat(self.messages, settings=settings, tools=TOOLS)
+            except Exception as e:
+                # Never die silently: speak the failure so the user knows.
+                print(f"[llm] error: {e}", flush=True)
+                self.messages.pop()  # drop this user turn; history stays clean
+                return "Sorry, I had trouble reaching my brain just now. Could you say that again?"
+            tool_calls = resp.tool_calls
+            if not tool_calls:
+                reply = (resp.content or "").strip()
+                # Drop the user turn on a failed/empty reply so history stays sane
+                if not reply:
+                    self.messages.pop()
+                    return "I heard you but didn't catch what to do. Could you say that another way?"
+                return reply
+            # Append the assistant's tool-call turn
+            self.messages.append(llm.assistant_message(resp.content, tool_calls, fmt))
+            # Execute each tool and append its result
+            last_results = []
+            for tc in tool_calls:
+                name = tc.name
+                args = tc.arguments
+                print(f"[tool] {name}({args})", flush=True)
+                status = run_tool(name, args)
+                last_results.append((name, status))
+                self.messages.append(llm.tool_result_message(tc, status, fmt))
+        # If we exhausted rounds, fall back to a confirmation phrase
+        return confirmation_for(last_results) or "Done."
 
 
 # ---------------------------------------------------------------------------
@@ -975,6 +1009,106 @@ def main():
     last_response = 0.0
     debounce = max(1, int(cfg.get("wake_debounce_frames", 3)))
     cooldown = float(cfg.get("cooldown_seconds", 5.0))
+    followup_s = float(cfg.get("followup_seconds", 8.0))
+    max_turns = int(cfg.get("max_conversation_turns", 6))
+
+    def record_utterance(max_seconds=None):
+        """Record speech until silence. Returns trimmed f32 audio or None."""
+        limit = max_seconds or cfg["max_speech_seconds"]
+        speech_chunks = []
+        heard_speech = False
+        silence_frames = 0
+        max_frames = int(limit * SAMPLE_RATE / CHUNK)
+        silence_frames_needed = int(cfg["silence_seconds"] * SAMPLE_RATE / CHUNK)
+
+        for _ in range(max_frames):
+            c, _ = stream.read(CHUNK)
+            c = c.flatten()
+            speech_chunks.append(c)
+
+            # VAD on accumulated audio
+            audio_f32 = _int16_to_float32(np.concatenate(speech_chunks))
+            tensor = torch.from_numpy(audio_f32)
+            ts = get_speech_timestamps(
+                tensor, vad, sampling_rate=SAMPLE_RATE, threshold=0.5
+            )
+            if ts:
+                heard_speech = True
+                last_end = ts[-1]["end"] / SAMPLE_RATE
+                elapsed = len(audio_f32) / SAMPLE_RATE
+                if elapsed - last_end >= cfg["silence_seconds"]:
+                    break
+            else:
+                if heard_speech:
+                    silence_frames += 1
+                    if silence_frames >= silence_frames_needed:
+                        break
+
+        if not heard_speech:
+            return None
+
+        speech = np.concatenate(speech_chunks)
+        speech_f32 = _int16_to_float32(speech)
+
+        # Trim to speech region
+        tensor = torch.from_numpy(speech_f32)
+        ts = get_speech_timestamps(
+            tensor, vad, sampling_rate=SAMPLE_RATE, threshold=0.5
+        )
+        if ts:
+            start = ts[0]["start"]
+            end = ts[-1]["end"]
+            speech_f32 = speech_f32[start:end]
+
+        if len(speech_f32) < SAMPLE_RATE * 0.3:  # < 0.3s, too short
+            return None
+        return speech_f32
+
+    def wake_detected(score):
+        """True when the wake word fires (debounced, not in cooldown)."""
+        nonlocal wake_frames
+        if score >= cfg["wake_threshold"]:
+            wake_frames += 1
+        else:
+            wake_frames = 0
+        in_cooldown = (time.time() - last_response) < cooldown
+        if wake_frames >= debounce and not in_cooldown:
+            wake_frames = 0
+            return True
+        return False
+
+    def converse(first_text):
+        """Run a multi-turn conversation.
+
+        Turns: user speaks -> Ember replies -> listen for a follow-up
+        (no wake word needed) for followup_seconds. Ends when the
+        follow-up window expires with no speech, or after max_turns.
+        """
+        convo = Conversation()
+        text = first_text
+        for turn in range(max_turns):
+            print(f"[conv] turn {turn + 1}", flush=True)
+            reply = convo.ask(text)
+            print(f"[llm] {reply!r}", flush=True)
+            voice = _load_settings().get("tts_voice") or cfg["tts_voice"]
+            if reply:
+                speak(reply, voice)
+
+            # Follow-up window: after Ember speaks, keep listening for a
+            # response (a clarifying answer, "also add...", "never mind").
+            # Wake word is NOT required in this window. Saying "Hey Ember"
+            # in this window is just part of the next utterance; the outer
+            # loop's cooldown (set when the conversation ends) prevents a
+            # second session from double-triggering.
+            audio = record_utterance(max_seconds=followup_s)
+            if audio is None:
+                print("[conv] no follow-up, closing conversation", flush=True)
+                return
+            text = transcribe(audio, cfg["stt_model"])
+            print(f"[stt] {text!r}", flush=True)
+            if not text:
+                print("[conv] unintelligible follow-up, closing", flush=True)
+                return
 
     while True:
         try:
@@ -984,18 +1118,7 @@ def main():
             prediction = oww.predict(chunk)
             score = prediction.get(wake_key, 0.0)
 
-            # Debounce: require N consecutive frames above threshold so a
-            # single transient spike (or the word "Ember" in conversation)
-            # doesn't trigger a response.
-            if score >= cfg["wake_threshold"]:
-                wake_frames += 1
-            else:
-                wake_frames = 0
-
-            in_cooldown = (time.time() - last_response) < cooldown
-
-            if wake_frames >= debounce and not in_cooldown:
-                wake_frames = 0
+            if wake_detected(score):
                 print(f"[wake] detected ({score:.2f})", flush=True)
 
                 # Acknowledge the wake word with a short chime so the user
@@ -1004,55 +1127,10 @@ def main():
                 time.sleep(0.25)  # let the chime tail clear before recording
 
                 # 2. Record speech until silence (VAD)
-                speech_chunks = []
-                heard_speech = False
-                silence_frames = 0
-                max_frames = int(cfg["max_speech_seconds"] * SAMPLE_RATE / CHUNK)
-                silence_frames_needed = int(cfg["silence_seconds"] * SAMPLE_RATE / CHUNK)
+                speech_f32 = record_utterance()
 
-                for _ in range(max_frames):
-                    c, _ = stream.read(CHUNK)
-                    c = c.flatten()
-                    speech_chunks.append(c)
-
-                    # VAD on accumulated audio
-                    audio_f32 = _int16_to_float32(np.concatenate(speech_chunks))
-                    tensor = torch.from_numpy(audio_f32)
-                    ts = get_speech_timestamps(
-                        tensor, vad, sampling_rate=SAMPLE_RATE, threshold=0.5
-                    )
-                    if ts:
-                        heard_speech = True
-                        last_end = ts[-1]["end"] / SAMPLE_RATE
-                        elapsed = len(audio_f32) / SAMPLE_RATE
-                        if elapsed - last_end >= cfg["silence_seconds"]:
-                            break
-                    else:
-                        if heard_speech:
-                            silence_frames += 1
-                            if silence_frames >= silence_frames_needed:
-                                break
-
-                if not heard_speech:
+                if speech_f32 is None:
                     print("[wake] no speech captured", flush=True)
-                    last_response = time.time()
-                    continue
-
-                speech = np.concatenate(speech_chunks)
-                speech_f32 = _int16_to_float32(speech)
-
-                # Trim to speech region
-                tensor = torch.from_numpy(speech_f32)
-                ts = get_speech_timestamps(
-                    tensor, vad, sampling_rate=SAMPLE_RATE, threshold=0.5
-                )
-                if ts:
-                    start = ts[0]["start"]
-                    end = ts[-1]["end"]
-                    speech_f32 = speech_f32[start:end]
-
-                if len(speech_f32) < SAMPLE_RATE * 0.3:  # < 0.3s, too short
-                    print("[wake] speech too short", flush=True)
                     last_response = time.time()
                     continue
 
@@ -1069,14 +1147,9 @@ def main():
                     last_response = time.time()
                     continue
 
-                # 4. LLM (with tool calling)
+                # 4+5. LLM (multi-turn, tool calling) + TTS
                 print("[llm] thinking...", flush=True)
-                reply = ask_llm(text)
-                print(f"[llm] {reply!r}", flush=True)
-
-                # 5. TTS
-                voice = _load_settings().get("tts_voice") or cfg["tts_voice"]
-                speak(reply, voice)
+                converse(text)
                 last_response = time.time()
 
         except KeyboardInterrupt:
