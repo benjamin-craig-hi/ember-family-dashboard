@@ -631,7 +631,7 @@ osk.addEventListener('click', (e) => {
 });
 
 // ---- Dashboard logic ----
-let _last = { cal: '', chores: '', notes: '' };
+let _last = { cal: '', chores: '', notes: '', photos: '' };
 let _events = [];
 let _chores = [];
 let _calView = { y: 0, m: 0 };
@@ -902,7 +902,7 @@ async function loadNotes() {
   const key = JSON.stringify(d);
   if (key !== _last.notes) { _last.notes = key; document.getElementById('notes').innerHTML = html; }
 }
-function refreshAll() { loadCalendar(); loadChores(); loadNotes(); loadFamily(); loadRewards(); }
+function refreshAll() { loadCalendar(); loadChores(); loadNotes(); loadFamily(); loadRewards(); loadPhotos(); }
 
 // ---- Edit modal (chores + calendar events) ----
 const EDIT_COLORS = ['#ff7a1a', '#4a9eff', '#4ade80', '#f472b6', '#facc15', '#a78bfa', '#f87171', '#2dd4bf'];
@@ -1612,8 +1612,13 @@ async function loadPhotos() {
   try {
     const r = await fetch('/api/photos');
     const d = await r.json();
-    _photos = d.photos || [];
-    renderPhotoList();
+    const list = d.photos || [];
+    const key = JSON.stringify(list.map(p => p.name));
+    if (key !== _last.photos) {
+      _last.photos = key;
+      _photos = list;
+      renderPhotoList();
+    }
   } catch (e) {}
 }
 
