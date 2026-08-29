@@ -631,7 +631,7 @@ osk.addEventListener('click', (e) => {
 });
 
 // ---- Dashboard logic ----
-let _last = { cal: '', chores: '', notes: '', photos: '' };
+let _last = { cal: '', chores: '', notes: '', photos: '', lists: '' };
 let _events = [];
 let _chores = [];
 let _calView = { y: 0, m: 0 };
@@ -902,7 +902,7 @@ async function loadNotes() {
   const key = JSON.stringify(d);
   if (key !== _last.notes) { _last.notes = key; document.getElementById('notes').innerHTML = html; }
 }
-function refreshAll() { loadCalendar(); loadChores(); loadNotes(); loadFamily(); loadRewards(); loadPhotos(); }
+function refreshAll() { loadCalendar(); loadChores(); loadNotes(); loadFamily(); loadRewards(); loadPhotos(); loadLists(); }
 
 // ---- Edit modal (chores + calendar events) ----
 const EDIT_COLORS = ['#ff7a1a', '#4a9eff', '#4ade80', '#f472b6', '#facc15', '#a78bfa', '#f87171', '#2dd4bf'];
@@ -1445,6 +1445,11 @@ let _lists = { grocery: [], custom: [] };
 async function loadLists() {
   const r = await fetch('/api/lists');
   const d = await r.json();
+  const key = JSON.stringify(d);
+  // Diff-guard: voice/chat additions update the file on disk, so poll for
+  // changes — but only re-render when data actually changed (no flicker).
+  if (key === _last.lists) return;
+  _last.lists = key;
   _lists = d.lists || { grocery: [], custom: [] };
   renderGrocery();
   renderCustomLists();

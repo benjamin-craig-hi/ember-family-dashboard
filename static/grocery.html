@@ -43,6 +43,11 @@ async function load() {
   const r = await fetch('/api/lists');
   const d = await r.json();
   const items = (d.lists && d.lists.grocery) || [];
+  const key = JSON.stringify(items.map(it => [it.text, it.done]));
+  // Only touch the DOM when data actually changed — keeps the poll from
+  // flickering or eating a checkbox click mid-tap.
+  if (key === load._lastKey) return;
+  load._lastKey = key;
   const ul = document.getElementById('list');
   if (!items.length) { ul.innerHTML = '<div class="empty">Nothing yet — add an item above.</div>'; return; }
   ul.innerHTML = items.map((it, i) =>
@@ -86,6 +91,9 @@ async function exportList() {
 }
 document.getElementById('in').addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
 load();
+// Auto-refresh: poll for changes so items added by voice appear without a
+// manual reload. Diff-guard above keeps the DOM untouched when nothing changed.
+setInterval(load, 3000);
 </script>
 </body>
 </html>
