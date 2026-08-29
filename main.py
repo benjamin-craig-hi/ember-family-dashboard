@@ -93,6 +93,7 @@ DEFAULT_SETTINGS = {
     "llm_api_provider": "ollama",     # key into llm.API_PROVIDERS (when provider == "api")
     "llm_base_url": "",               # override for the API endpoint
     "llm_api_key": "",                # stored locally; never returned by the API
+    "llm_num_ctx": 32768,             # context window (tokens); gemma4:31b supports up to 256K
     # Home management (Phase 5)
     "pin": "",                     # 4-digit parental PIN (empty = no lock)
     "sleep_mode": False,            # dim screen + pause feed during sleep hours
@@ -240,7 +241,7 @@ def api_chat(req: ChatRequest):
         {"role": "system", "content": f"Today is {today}. You are Ember, the warm, self-hosted family assistant — the light from within the home. You help the family stay organized and connected. Answer in one short sentence, warm and plain-spoken. No emoji. When the user asks you to add a note, chore, or calendar event, use the appropriate tool to actually save it. For calendar events, resolve relative dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."},
         {"role": "user", "content": req.content},
     ]
-    resp = llm.chat(messages, settings=settings, tools=TOOLS, options={"num_ctx": 4096})
+    resp = llm.chat(messages, settings=settings, tools=TOOLS)
     if resp.tool_calls:
         for tc in resp.tool_calls:
             _run_tool(tc.name, tc.arguments)
@@ -977,7 +978,6 @@ async def suggest_meals(request: Request):
         resp = llm.chat(
             [{"role": "user", "content": prompt}],
             settings=_load_settings(),
-            options={"num_ctx": 2048},
         )
         content = (resp.content or "").strip()
         # Extract JSON object from the response (strip any markdown fences)

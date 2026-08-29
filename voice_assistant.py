@@ -855,7 +855,7 @@ def ask_llm(text):
     ]
     last_results = []
     for _ in range(4):  # allow up to 4 tool rounds (list -> delete -> confirm)
-        resp = llm.chat(messages, settings=settings, tools=TOOLS, options={"num_ctx": 4096})
+        resp = llm.chat(messages, settings=settings, tools=TOOLS)
         tool_calls = resp.tool_calls
         if not tool_calls:
             return resp.content or ""

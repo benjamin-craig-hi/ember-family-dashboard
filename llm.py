@@ -123,8 +123,8 @@ def _chat_ollama(messages, model, host, key, tools, options):
     kwargs = {"model": model, "messages": messages}
     if tools:
         kwargs["tools"] = tools
-    # num_ctx is a local KV-cache optimization; cloud models manage their own.
-    if options and host != OLLAMA_CLOUD_HOST:
+    # num_ctx applies to both local and cloud Ollama (cloud accepts it too).
+    if options:
         kwargs["options"] = options
     resp = client.chat(**kwargs)
     msg = resp.message
@@ -232,6 +232,12 @@ def chat(messages, *, settings, tools=None, options=None):
         provider = PROVIDER_LOCAL
     model = (settings.get("llm_model") or "").strip() or _default_model(provider, settings)
     key = _resolve_key(settings)
+
+    # Context window: caller may pass options; otherwise use the configured
+    # llm_num_ctx (default 32768). Applies to local and cloud Ollama alike.
+    if options is None:
+        num_ctx = settings.get("llm_num_ctx") or 32768
+        options = {"num_ctx": int(num_ctx)}
 
     if provider == PROVIDER_LOCAL:
         host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")

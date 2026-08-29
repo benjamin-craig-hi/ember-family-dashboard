@@ -360,6 +360,10 @@
       <label>Model name</label>
       <input id="set-llm-model" placeholder="e.g. gemma4:31b">
     </div>
+    <div class="field">
+      <label>Context window (tokens)</label>
+      <input id="set-llm-num-ctx" type="number" min="2048" step="1024" placeholder="32768">
+    </div>
     <div class="field" id="llm-key-wrap" style="display:none">
       <label>API key</label>
       <input id="set-llm-key" type="password" placeholder="Leave blank to keep the saved key">
@@ -1270,6 +1274,7 @@ function openSettings() {
   document.getElementById('set-wakeword').value = _settings.wake_word || 'Hey Ember';
   document.getElementById('set-llm-provider').value = _settings.llm_provider || 'local';
   document.getElementById('set-llm-model').value = _settings.llm_model || '';
+  document.getElementById('set-llm-num-ctx').value = _settings.llm_num_ctx || 32768;
   document.getElementById('set-llm-key').value = '';
   const cpsel = document.getElementById('set-llm-api-provider');
   cpsel.innerHTML = LLM_API_PROVIDERS.map(p => '<option value="' + p.id + '"' + ((_settings.llm_api_provider || 'ollama') === p.id ? ' selected' : '') + '>' + p.label + '</option>').join('');
@@ -1403,6 +1408,7 @@ async function saveSettings() {
     llm_provider: document.getElementById('set-llm-provider').value,
     llm_model: document.getElementById('set-llm-model').value,
     llm_api_provider: document.getElementById('set-llm-api-provider').value,
+    llm_num_ctx: parseInt(document.getElementById('set-llm-num-ctx').value, 10) || 32768,
     llm_api_key: document.getElementById('set-llm-key').value,
     notify_calendar: document.getElementById('set-notify-cal').checked,
     notify_news: document.getElementById('set-notify-news').checked,
