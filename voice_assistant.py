@@ -8,9 +8,9 @@ STT (Moonshine ONNX) -> LLM (Ollama) -> TTS (Kokoro).
 Runs standalone as a systemd user service. Audio in/out via PipeWire's
 'default' device (auto-resamples the CX20755 codec to 16kHz).
 
-LLM runs on a GPU workstation on the LAN — the kiosk is CPU-only and too slow
-for a good model, so the LLM call is offloaded over the LAN. Set OLLAMA_HOST
-to point at that box (defaults to localhost).
+LLM is routed through llm.py: local Ollama (LAN offload), Ollama cloud
+(ollama.com with an API key), or a BYOK cloud provider. The provider and
+model are chosen in the dashboard settings.
 
 Wake-word hardening: a debounce (N consecutive frames above threshold),
 a higher threshold, and a post-response cooldown so it only answers a
@@ -28,6 +28,8 @@ from datetime import datetime
 
 import numpy as np
 import sounddevice as sd
+
+import llm
 
 SAMPLE_RATE = 16000
 CHUNK = 1280  # 80ms @ 16kHz (openWakeWord default frame)
@@ -53,8 +55,6 @@ def _load_dotenv(path):
 
 _load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b-q8_0")
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 ASSISTANT_NAME = "Ember"
 
 CONFIG_PATH = os.path.join(BASE_DIR, "voice_config.json")
@@ -820,22 +820,13 @@ def transcribe(audio_np, model_name="moonshine/tiny"):
 
 
 # ---------------------------------------------------------------------------
-# LLM (Ollama, optionally offloaded to a GPU box on the LAN)
+# LLM (routed via llm.py: local Ollama, Ollama cloud, or BYOK cloud)
 # ---------------------------------------------------------------------------
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        from ollama import Client
-        _client = Client(host=OLLAMA_HOST)
-    return _client
-
-
 def ask_llm(text):
     today = datetime.now().strftime("%A, %B %d, %Y")
-    name = _load_settings().get("assistant_name") or ASSISTANT_NAME
+    settings = _load_settings()
+    name = settings.get("assistant_name") or ASSISTANT_NAME
+    provider = settings.get("llm_provider") or "local"
     system = (
         f"Today is {today}. You are {name}, the warm, self-hosted family assistant — the light from within the home. "
         "You help the family stay organized and connected. "
@@ -864,34 +855,21 @@ def ask_llm(text):
     ]
     last_results = []
     for _ in range(4):  # allow up to 4 tool rounds (list -> delete -> confirm)
-        resp = _get_client().chat(model=MODEL, messages=messages, tools=TOOLS, options={"num_ctx": 4096})
-        msg = resp.message
-        tool_calls = getattr(msg, "tool_calls", None)
+        resp = llm.chat(messages, settings=settings, tools=TOOLS, options={"num_ctx": 4096})
+        tool_calls = resp.tool_calls
         if not tool_calls:
-            return msg.content or ""
+            return resp.content or ""
         # Append the assistant's tool-call turn
-        messages.append({
-            "role": "assistant",
-            "content": msg.content or "",
-            "tool_calls": [
-                {"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                for tc in tool_calls
-            ],
-        })
+        messages.append(llm.assistant_message(resp.content, tool_calls, provider))
         # Execute each tool and append its result
         last_results = []
         for tc in tool_calls:
-            name = tc.function.name
-            try:
-                args = tc.function.arguments
-                if isinstance(args, str):
-                    args = json.loads(args)
-            except Exception:
-                args = {}
+            name = tc.name
+            args = tc.arguments
             print(f"[tool] {name}({args})", flush=True)
             status = run_tool(name, args)
             last_results.append((name, status))
-            messages.append({"role": "tool", "content": str(status), "tool_name": name})
+            messages.append(llm.tool_result_message(tc, status, provider))
     # If we exhausted rounds, fall back to a confirmation phrase
     return confirmation_for(last_results)
 

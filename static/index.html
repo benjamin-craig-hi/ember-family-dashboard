@@ -344,6 +344,28 @@
       <input id="set-wakeword" placeholder="Hey Ember">
     </div>
 
+    <h3>AI brain (model)</h3>
+    <div class="field">
+      <label>Provider</label>
+      <select id="set-llm-provider" onchange="llmProviderChange()">
+        <option value="local">Local Ollama (free, private, slower)</option>
+        <option value="ollama_cloud">Ollama Cloud (fast, needs key)</option>
+        <option value="cloud">BYOK cloud (OpenAI, Claude, etc.)</option>
+      </select>
+    </div>
+    <div class="field" id="llm-cloud-provider-wrap" style="display:none">
+      <label>Cloud provider</label>
+      <select id="set-llm-cloud-provider"></select>
+    </div>
+    <div class="field">
+      <label>Model name</label>
+      <input id="set-llm-model" placeholder="e.g. gemma4:31b">
+    </div>
+    <div class="field" id="llm-key-wrap" style="display:none">
+      <label>API key</label>
+      <input id="set-llm-key" type="password" placeholder="Leave blank to keep the saved key">
+    </div>
+
     <h3>Notification feed</h3>
     <div class="field">
       <label class="check"><input type="checkbox" id="set-notify-cal"> Show upcoming calendar events</label>
@@ -1139,6 +1161,19 @@ const VOICES = [
   { id: 'am_puck', label: 'Puck (male)' },
   { id: 'am_santa', label: 'Santa (male)' },
 ];
+const LLM_CLOUD_PROVIDERS = [
+  { id: 'openai', label: 'OpenAI' },
+  { id: 'openrouter', label: 'OpenRouter (multi-provider)' },
+  { id: 'mistral', label: 'Mistral AI' },
+  { id: 'groq', label: 'Groq (fast inference)' },
+  { id: 'anthropic', label: 'Anthropic (Claude)' },
+  { id: 'gemini', label: 'Google Gemini' },
+];
+function llmProviderChange() {
+  const p = document.getElementById('set-llm-provider').value;
+  document.getElementById('llm-cloud-provider-wrap').style.display = (p === 'cloud') ? '' : 'none';
+  document.getElementById('llm-key-wrap').style.display = (p === 'local') ? 'none' : '';
+}
 const NEWS_PRESETS = [
   // News — general
   { label: 'NPR — Top Stories', url: 'https://feeds.npr.org/1001/rss.xml' },
@@ -1233,6 +1268,12 @@ function openSettings() {
   const vsel = document.getElementById('set-voice');
   vsel.innerHTML = VOICES.map(v => '<option value="' + v.id + '"' + ((_settings.tts_voice || 'af_heart') === v.id ? ' selected' : '') + '>' + v.label + '</option>').join('');
   document.getElementById('set-wakeword').value = _settings.wake_word || 'Hey Ember';
+  document.getElementById('set-llm-provider').value = _settings.llm_provider || 'local';
+  document.getElementById('set-llm-model').value = _settings.llm_model || '';
+  document.getElementById('set-llm-key').value = '';
+  const cpsel = document.getElementById('set-llm-cloud-provider');
+  cpsel.innerHTML = LLM_CLOUD_PROVIDERS.map(p => '<option value="' + p.id + '"' + ((_settings.llm_cloud_provider || 'openai') === p.id ? ' selected' : '') + '>' + p.label + '</option>').join('');
+  llmProviderChange();
   document.getElementById('set-notify-cal').checked = !!_settings.notify_calendar;
   document.getElementById('set-notify-news').checked = !!_settings.notify_news;
   document.getElementById('set-notify-email').checked = !!_settings.notify_email;
@@ -1360,6 +1401,10 @@ async function saveSettings() {
     assistant_name: document.getElementById('set-assistant').value,
     tts_voice: document.getElementById('set-voice').value,
     wake_word: document.getElementById('set-wakeword').value,
+    llm_provider: document.getElementById('set-llm-provider').value,
+    llm_model: document.getElementById('set-llm-model').value,
+    llm_cloud_provider: document.getElementById('set-llm-cloud-provider').value,
+    llm_api_key: document.getElementById('set-llm-key').value,
     notify_calendar: document.getElementById('set-notify-cal').checked,
     notify_news: document.getElementById('set-notify-news').checked,
     notify_email: document.getElementById('set-notify-email').checked,

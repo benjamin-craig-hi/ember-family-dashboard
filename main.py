@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from ollama import Client
+import llm
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -31,9 +31,6 @@ def _load_dotenv(path):
 
 _load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b-q8_0")
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-_client = Client(host=OLLAMA_HOST)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 PHOTOS_DIR = os.path.join(BASE_DIR, "photos")
@@ -90,6 +87,12 @@ DEFAULT_SETTINGS = {
     # Screensaver (Phase 3)
     "screensaver_enabled": True,
     "screensaver_idle_minutes": 5,
+    # LLM routing (model picker / BYOK)
+    "llm_provider": "local",          # "local" | "ollama_cloud" | "cloud"
+    "llm_model": "",                  # empty = provider default
+    "llm_cloud_provider": "openai",   # key into llm.CLOUD_PROVIDERS
+    "llm_base_url": "",               # override for cloud/custom endpoints
+    "llm_api_key": "",                # stored locally; never returned by the API
     # Home management (Phase 5)
     "pin": "",                     # 4-digit parental PIN (empty = no lock)
     "sleep_mode": False,            # dim screen + pause feed during sleep hours
@@ -231,29 +234,18 @@ def _run_tool(name, args):
 @app.post("/api/chat")
 def api_chat(req: ChatRequest):
     today = datetime.now().strftime("%A, %B %d, %Y")
-    resp = _client.chat(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": f"Today is {today}. You are Ember, the warm, self-hosted family assistant — the light from within the home. You help the family stay organized and connected. Answer in one short sentence, warm and plain-spoken. No emoji. When the user asks you to add a note, chore, or calendar event, use the appropriate tool to actually save it. For calendar events, resolve relative dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."},
-            {"role": "user", "content": req.content},
-        ],
-        tools=TOOLS,
-        options={"num_ctx": 4096},
-    )
-    msg = resp.message
-    tool_calls = getattr(msg, "tool_calls", None)
-    if tool_calls:
-        for tc in tool_calls:
-            fn = tc.function
-            try:
-                args = fn.arguments
-                if isinstance(args, str):
-                    args = json.loads(args)
-            except Exception:
-                args = {}
-            _run_tool(fn.name, args)
+    settings = _load_settings()
+    provider = settings.get("llm_provider") or "local"
+    messages = [
+        {"role": "system", "content": f"Today is {today}. You are Ember, the warm, self-hosted family assistant — the light from within the home. You help the family stay organized and connected. Answer in one short sentence, warm and plain-spoken. No emoji. When the user asks you to add a note, chore, or calendar event, use the appropriate tool to actually save it. For calendar events, resolve relative dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."},
+        {"role": "user", "content": req.content},
+    ]
+    resp = llm.chat(messages, settings=settings, tools=TOOLS, options={"num_ctx": 4096})
+    if resp.tool_calls:
+        for tc in resp.tool_calls:
+            _run_tool(tc.name, tc.arguments)
         return {"reply": "Done."}
-    return {"reply": msg.content}
+    return {"reply": resp.content}
 
 
 @app.get("/api/chores")
@@ -503,7 +495,11 @@ def get_milestones():
 # ---------------------------------------------------------------------------
 @app.get("/api/settings")
 def get_settings():
-    return _load_settings()
+    s = _load_settings()
+    # Never return the API key to the client — only a flag that one is set.
+    s["llm_api_key_set"] = bool((s.get("llm_api_key") or "").strip())
+    s["llm_api_key"] = ""
+    return s
 
 
 @app.put("/api/settings")
@@ -512,8 +508,14 @@ async def put_settings(request: Request):
     s = _load_settings()
     for k in DEFAULT_SETTINGS:
         if k in body:
+            # An empty api_key means "keep the existing one" (the client never
+            # sees the stored key, so it can't echo it back).
+            if k == "llm_api_key" and not (body[k] or "").strip():
+                continue
             s[k] = body[k]
     _save_settings(s)
+    s["llm_api_key_set"] = bool((s.get("llm_api_key") or "").strip())
+    s["llm_api_key"] = ""
     return s
 
 
@@ -970,12 +972,12 @@ async def suggest_meals(request: Request):
         prompt += f" Preferences/constraints: {preferences}."
     prompt += " Return ONLY a JSON object mapping each day name to a short meal name (e.g. {\"Monday\": \"Spaghetti\"}). No other text."
     try:
-        resp = _client.chat(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
+        resp = llm.chat(
+            [{"role": "user", "content": prompt}],
+            settings=_load_settings(),
             options={"num_ctx": 2048},
         )
-        content = (resp.message.content or "").strip()
+        content = (resp.content or "").strip()
         # Extract JSON object from the response (strip any markdown fences)
         m = re.search(r"\{.*\}", content, re.S)
         if not m:

@@ -125,15 +125,16 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
 
 ## LLM deployment
 
-Ember's chat and voice features need an LLM. There are three ways to run it,
-depending on your hardware.
+Ember's chat and voice features need an LLM. Pick the brain in **Settings →
+AI brain (model)** — three providers, no code changes.
 
-### A. LAN offload (the default setup)
+### A. Local Ollama (default)
 
-The kiosk is a low-power, CPU-only machine, so the model runs on a **second
-computer on your network** — a GPU workstation — and the kiosk talks to it over
-the LAN. This is the setup the project was built around: the kiosk stays cheap
-and quiet, and the heavy lifting happens on a machine that already has a GPU.
+Runs a model on a machine you control. Two sub-modes:
+
+- **LAN offload** — the kiosk is CPU-only, so run Ollama on a second GPU
+  machine and point the kiosk at it via `OLLAMA_HOST` in `.env`.
+- **Fully local** — run Ollama on the kiosk itself (smaller model).
 
 ```bash
 # on the GPU box: bind Ollama to the network
@@ -143,25 +144,22 @@ OLLAMA_HOST=0.0.0.0:11434 ollama serve
 OLLAMA_HOST=http://<gpu-box-ip>:11434
 ```
 
-> **Dependency note:** in this mode the dashboard and voice assistant depend on
-> that second machine being on and reachable. If it's off, chat and voice
-> commands won't get a response — but the rest of the board (calendar, chores,
-> notes, weather) keeps working.
+### B. Ollama Cloud (fast, no GPU needed)
 
-### B. Fully local (single machine)
+Ollama's cloud models run on ollama.com — no download, no GPU. Create an API
+key at <https://ollama.com/settings/keys>, then in Settings pick **Ollama
+Cloud** and paste the key. Model names use the plain tag (e.g. `gemma4:31b`,
+`qwen3.5:397b`, `glm-5.2`) — no `:cloud` suffix.
 
-If your kiosk hardware can handle it, you can run Ollama directly on the same
-machine and skip the second computer entirely. Install Ollama on the kiosk and
-leave `OLLAMA_HOST` at the default `http://localhost:11434`. A smaller model
-(e.g. `qwen3:4b` or `llama3.2:3b`) keeps it responsive on modest hardware.
+### C. Bring-your-own-key (BYOK) cloud
 
-### C. Bring-your-own-key (BYOK) cloud — *in the works*
+Plug in an API key for any OpenAI-compatible provider (OpenAI, OpenRouter,
+Mistral, Groq) or native Anthropic/Gemini, and Ember routes chat and voice to
+that API. Full tool-calling works on OpenAI-compatible providers; Anthropic
+and Gemini are chat-only (route those through OpenRouter for tool-calling).
 
-For anyone who'd rather not run a model locally at all, a BYOK option is
-planned: plug in an API key for whatever provider you like (OpenAI, Anthropic,
-Google, Mistral, OpenRouter, etc.) and Ember will route chat and voice to that
-cloud API instead of a local model. This is not implemented yet — it's on the
-roadmap.
+The API key is stored in `data/settings.json` (git-ignored) and is never
+returned by the settings API or logged.
 
 ## Roadmap
 
@@ -180,7 +178,8 @@ In progress / TODO:
 
 - ✅ **"Hey Ember" wake word** — custom-trained model (accuracy 0.865, 0 false
   positives/hour), deployed and live.
-- 🚧 **BYOK cloud API** — bring-your-own-key routing for chat/voice.
+- ✅ **BYOK cloud API** — model picker (local Ollama / Ollama Cloud / BYOK
+  cloud) for chat and voice.
 - ⬜ **Two-way calendar sync** — Google OAuth, iCloud/CalDAV, and Outlook/Graph
   push/pull (needs per-provider credentials).
 - ⬜ **Email notification feed** — surface inbox items in the rotating feed
@@ -196,6 +195,7 @@ In progress / TODO:
 
 - `main.py` — FastAPI dashboard (board + chat + tool calling + weather +
   notifications + settings + rewards + photos + lists + meals + iCal import)
+- `llm.py` — LLM routing (local Ollama / Ollama Cloud / BYOK cloud)
 - `voice_assistant.py` — the standalone voice loop (wake → VAD → STT → LLM → TTS)
 - `static/index.html` — the dashboard UI (calendar, chores, notes, rewards,
   weather, clock, notification feed, settings, on-screen keyboard)
