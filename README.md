@@ -126,7 +126,7 @@ kiosk, or (soon) a bring-your-own-key cloud API. See
 ## LLM deployment
 
 Ember's chat and voice features need an LLM. Pick the brain in **Settings →
-AI brain (model)** — three providers, no code changes.
+AI brain (model)** — two providers, no code changes.
 
 ### A. Local Ollama (default)
 
@@ -144,19 +144,18 @@ OLLAMA_HOST=0.0.0.0:11434 ollama serve
 OLLAMA_HOST=http://<gpu-box-ip>:11434
 ```
 
-### B. Ollama Cloud (fast, no GPU needed)
+### B. API (Ollama Cloud, OpenAI, Claude, etc.)
 
-Ollama's cloud models run on ollama.com — no download, no GPU. Create an API
-key at <https://ollama.com/settings/keys>, then in Settings pick **Ollama
-Cloud** and paste the key. Model names use the plain tag (e.g. `gemma4:31b`,
-`qwen3.5:397b`, `glm-5.2`) — no `:cloud` suffix.
+Pick **API** in Settings, choose an API provider, and paste your key. The
+providers:
 
-### C. Bring-your-own-key (BYOK) cloud
-
-Plug in an API key for any OpenAI-compatible provider (OpenAI, OpenRouter,
-Mistral, Groq) or native Anthropic/Gemini, and Ember routes chat and voice to
-that API. Full tool-calling works on OpenAI-compatible providers; Anthropic
-and Gemini are chat-only (route those through OpenRouter for tool-calling).
+- **Ollama Cloud** — ollama.com models, no GPU needed. Create a key at
+  <https://ollama.com/settings/keys>. Model names use the plain tag
+  (e.g. `gemma4:31b`, `qwen3.5:397b`, `glm-5.2`) — no `:cloud` suffix.
+- **OpenAI / OpenRouter / Mistral / Groq** — OpenAI-compatible, full
+  tool-calling.
+- **Anthropic / Gemini** — native, chat-only (route those through OpenRouter
+  for tool-calling).
 
 The API key is stored in `data/settings.json` (git-ignored) and is never
 returned by the settings API or logged.
@@ -178,8 +177,8 @@ In progress / TODO:
 
 - ✅ **"Hey Ember" wake word** — custom-trained model (accuracy 0.865, 0 false
   positives/hour), deployed and live.
-- ✅ **BYOK cloud API** — model picker (local Ollama / Ollama Cloud / BYOK
-  cloud) for chat and voice.
+- ✅ **Model picker** — local Ollama or a cloud API (Ollama Cloud, OpenAI,
+  Claude, etc.) for chat and voice.
 - ⬜ **Two-way calendar sync** — Google OAuth, iCloud/CalDAV, and Outlook/Graph
   push/pull (needs per-provider credentials).
 - ⬜ **Email notification feed** — surface inbox items in the rotating feed
@@ -195,7 +194,7 @@ In progress / TODO:
 
 - `main.py` — FastAPI dashboard (board + chat + tool calling + weather +
   notifications + settings + rewards + photos + lists + meals + iCal import)
-- `llm.py` — LLM routing (local Ollama / Ollama Cloud / BYOK cloud)
+- `llm.py` — LLM routing (local Ollama / cloud API)
 - `voice_assistant.py` — the standalone voice loop (wake → VAD → STT → LLM → TTS)
 - `static/index.html` — the dashboard UI (calendar, chores, notes, rewards,
   weather, clock, notification feed, settings, on-screen keyboard)
@@ -270,8 +269,8 @@ so a systemd `Environment=` line or a real shell export still wins.
 `.env` is git-ignored, so each machine keeps its own copy and repo updates
 never clobber it.
 
-See [LLM deployment](#llm-deployment) for the three ways to run the model
-(LAN offload, fully local, or BYOK cloud).
+See [LLM deployment](#llm-deployment) for the ways to run the model
+(local Ollama, or a cloud API).
 
 ### 4. Run
 

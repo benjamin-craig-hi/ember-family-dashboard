@@ -349,13 +349,12 @@
       <label>Provider</label>
       <select id="set-llm-provider" onchange="llmProviderChange()">
         <option value="local">Local Ollama (free, private, slower)</option>
-        <option value="ollama_cloud">Ollama Cloud (fast, needs key)</option>
-        <option value="cloud">BYOK cloud (OpenAI, Claude, etc.)</option>
+        <option value="api">API (Ollama Cloud, OpenAI, Claude, etc.)</option>
       </select>
     </div>
-    <div class="field" id="llm-cloud-provider-wrap" style="display:none">
-      <label>Cloud provider</label>
-      <select id="set-llm-cloud-provider"></select>
+    <div class="field" id="llm-api-provider-wrap" style="display:none">
+      <label>API provider</label>
+      <select id="set-llm-api-provider"></select>
     </div>
     <div class="field">
       <label>Model name</label>
@@ -1161,7 +1160,8 @@ const VOICES = [
   { id: 'am_puck', label: 'Puck (male)' },
   { id: 'am_santa', label: 'Santa (male)' },
 ];
-const LLM_CLOUD_PROVIDERS = [
+const LLM_API_PROVIDERS = [
+  { id: 'ollama', label: 'Ollama Cloud' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'openrouter', label: 'OpenRouter (multi-provider)' },
   { id: 'mistral', label: 'Mistral AI' },
@@ -1171,7 +1171,7 @@ const LLM_CLOUD_PROVIDERS = [
 ];
 function llmProviderChange() {
   const p = document.getElementById('set-llm-provider').value;
-  document.getElementById('llm-cloud-provider-wrap').style.display = (p === 'cloud') ? '' : 'none';
+  document.getElementById('llm-api-provider-wrap').style.display = (p === 'api') ? '' : 'none';
   document.getElementById('llm-key-wrap').style.display = (p === 'local') ? 'none' : '';
 }
 const NEWS_PRESETS = [
@@ -1271,13 +1271,12 @@ function openSettings() {
   document.getElementById('set-llm-provider').value = _settings.llm_provider || 'local';
   document.getElementById('set-llm-model').value = _settings.llm_model || '';
   document.getElementById('set-llm-key').value = '';
-  const cpsel = document.getElementById('set-llm-cloud-provider');
-  cpsel.innerHTML = LLM_CLOUD_PROVIDERS.map(p => '<option value="' + p.id + '"' + ((_settings.llm_cloud_provider || 'openai') === p.id ? ' selected' : '') + '>' + p.label + '</option>').join('');
+  const cpsel = document.getElementById('set-llm-api-provider');
+  cpsel.innerHTML = LLM_API_PROVIDERS.map(p => '<option value="' + p.id + '"' + ((_settings.llm_api_provider || 'ollama') === p.id ? ' selected' : '') + '>' + p.label + '</option>').join('');
   llmProviderChange();
   document.getElementById('set-notify-cal').checked = !!_settings.notify_calendar;
   document.getElementById('set-notify-news').checked = !!_settings.notify_news;
   document.getElementById('set-notify-email').checked = !!_settings.notify_email;
-  if (!_settings.news_feeds || !_settings.news_feeds.length) _settings.news_feeds = [NEWS_PRESETS[0].url];
   document.getElementById('set-notify-interval').value = _settings.notify_interval || 10;
   document.getElementById('set-ss-enabled').checked = _settings.screensaver_enabled !== false;
   document.getElementById('set-ss-idle').value = _settings.screensaver_idle_minutes || 5;
@@ -1403,7 +1402,7 @@ async function saveSettings() {
     wake_word: document.getElementById('set-wakeword').value,
     llm_provider: document.getElementById('set-llm-provider').value,
     llm_model: document.getElementById('set-llm-model').value,
-    llm_cloud_provider: document.getElementById('set-llm-cloud-provider').value,
+    llm_api_provider: document.getElementById('set-llm-api-provider').value,
     llm_api_key: document.getElementById('set-llm-key').value,
     notify_calendar: document.getElementById('set-notify-cal').checked,
     notify_news: document.getElementById('set-notify-news').checked,

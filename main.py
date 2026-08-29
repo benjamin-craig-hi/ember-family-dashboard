@@ -67,9 +67,9 @@ DEFAULT_MILESTONES = [
 ]
 
 DEFAULT_SETTINGS = {
-    "location": "Honolulu, HI",
-    "latitude": 21.3069,
-    "longitude": -157.8583,
+    "location": "",                 # empty until the user sets it (geocoded to lat/lon)
+    "latitude": None,
+    "longitude": None,
     "time_format": "12h",          # "12h" or "24h"
     "date_format": "weekday",      # "weekday" | "numeric" | "long"
     "temp_unit": "F",              # "F" or "C"
@@ -80,7 +80,7 @@ DEFAULT_SETTINGS = {
     "notify_calendar": True,
     "notify_news": False,
     "notify_email": False,
-    "news_feeds": ["https://feeds.npr.org/1001/rss.xml"],  # NPR Top Stories (default)
+    "news_feeds": [],               # empty until the user adds RSS/Atom feeds
     "notify_interval": 10,         # seconds between rotating feed items
     # Calendar connections (configured now; sync is a later phase)
     "calendar_connections": [],    # [{provider, url}]
@@ -88,10 +88,10 @@ DEFAULT_SETTINGS = {
     "screensaver_enabled": True,
     "screensaver_idle_minutes": 5,
     # LLM routing (model picker / BYOK)
-    "llm_provider": "local",          # "local" | "ollama_cloud" | "cloud"
+    "llm_provider": "local",          # "local" | "api"
     "llm_model": "",                  # empty = provider default
-    "llm_cloud_provider": "openai",   # key into llm.CLOUD_PROVIDERS
-    "llm_base_url": "",               # override for cloud/custom endpoints
+    "llm_api_provider": "ollama",     # key into llm.API_PROVIDERS (when provider == "api")
+    "llm_base_url": "",               # override for the API endpoint
     "llm_api_key": "",                # stored locally; never returned by the API
     # Home management (Phase 5)
     "pin": "",                     # 4-digit parental PIN (empty = no lock)
@@ -543,6 +543,8 @@ def get_weather():
     s = _load_settings()
     lat = s.get("latitude")
     lon = s.get("longitude")
+    if lat is None or lon is None:
+        return {"ok": False, "error": "no location set"}
     unit = s.get("temp_unit", "F")
     temp_unit = "fahrenheit" if unit == "F" else "celsius"
     url = (

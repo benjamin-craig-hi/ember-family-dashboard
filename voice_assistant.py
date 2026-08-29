@@ -820,13 +820,13 @@ def transcribe(audio_np, model_name="moonshine/tiny"):
 
 
 # ---------------------------------------------------------------------------
-# LLM (routed via llm.py: local Ollama, Ollama cloud, or BYOK cloud)
+# LLM (routed via llm.py: local Ollama, or a cloud API)
 # ---------------------------------------------------------------------------
 def ask_llm(text):
     today = datetime.now().strftime("%A, %B %d, %Y")
     settings = _load_settings()
     name = settings.get("assistant_name") or ASSISTANT_NAME
-    provider = settings.get("llm_provider") or "local"
+    fmt = llm.tool_format(settings)
     system = (
         f"Today is {today}. You are {name}, the warm, self-hosted family assistant — the light from within the home. "
         "You help the family stay organized and connected. "
@@ -860,7 +860,7 @@ def ask_llm(text):
         if not tool_calls:
             return resp.content or ""
         # Append the assistant's tool-call turn
-        messages.append(llm.assistant_message(resp.content, tool_calls, provider))
+        messages.append(llm.assistant_message(resp.content, tool_calls, fmt))
         # Execute each tool and append its result
         last_results = []
         for tc in tool_calls:
@@ -869,7 +869,7 @@ def ask_llm(text):
             print(f"[tool] {name}({args})", flush=True)
             status = run_tool(name, args)
             last_results.append((name, status))
-            messages.append(llm.tool_result_message(tc, status, provider))
+            messages.append(llm.tool_result_message(tc, status, fmt))
     # If we exhausted rounds, fall back to a confirmation phrase
     return confirmation_for(last_results)
 
