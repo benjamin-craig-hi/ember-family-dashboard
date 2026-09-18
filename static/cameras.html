@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cameras</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1d2026;
+    --panel-2: #23272f;
+    --line: #2e333c;
+    --text: #e8eaed;
+    --muted: #9aa1ac;
+    --accent: #4a9eff;
+    --good: #4ade80;
+    --warn: #facc15;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 1.5rem 2rem 2rem;
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
+  h1 { font-size: 2rem; margin: 0; font-weight: 600; }
+  .back-btn {
+    display: inline-flex; align-items: center; gap: .6rem;
+    font-size: 2rem; line-height: 1;
+    padding: .5rem 1.4rem; border-radius: 12px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); text-decoration: none; font-weight: 600;
+  }
+  .back-btn:active { background: #2c313a; }
+  .status { margin-left: auto; font-size: 1rem; color: var(--muted); }
+  .dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; background: var(--muted); margin-right: .4rem; }
+  .dot.on { background: var(--good); }
+  .dot.off { background: #f87171; }
+
+  .grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+  .cam {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .cam-head {
+    display: flex; align-items: baseline; gap: .75rem;
+    padding: .85rem 1rem; border-bottom: 1px solid var(--line);
+  }
+  .cam-name { font-size: 1.25rem; font-weight: 600; }
+  .cam-meta { font-size: .9rem; color: var(--muted); margin-left: auto; }
+  .cam-img {
+    width: 100%; display: block; background: #0d0f12;
+    aspect-ratio: 16 / 9; object-fit: contain;
+  }
+  .cam-foot { padding: .6rem 1rem; font-size: .9rem; color: var(--muted); }
+
+  /* Recent activity */
+  .events { margin-top: 2rem; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+  .events h2 { font-size: 1.25rem; margin: 0; padding: .85rem 1rem; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .ev-list { padding: .5rem; }
+  .ev {
+    display: flex; align-items: center; gap: .9rem;
+    padding: .55rem .75rem; border-radius: 9px;
+  }
+  .ev + .ev { border-top: 1px solid var(--line); }
+  .ev-label { font-weight: 600; min-width: 6.5rem; }
+  .ev-time { color: var(--muted); font-size: .95rem; }
+  .ev-cam { margin-left: auto; font-size: .9rem; color: var(--muted); }
+  .empty { padding: 1rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <a class="back-btn" href="/">&#8592;</a>
+  <h1>Cameras</h1>
+  <div class="status"><span id="sys-dot" class="dot"></span><span id="sys-text">connecting…</span></div>
+</header>
+
+<div class="grid" id="cam-grid"></div>
+
+<div class="events">
+  <h2>Recent activity</h2>
+  <div class="ev-list" id="ev-list"><div class="empty">Loading…</div></div>
+</div>
+
+<script>
+const _last = {};   // per-key cache -> only repaint when the payload changes
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function relTime(ts) {
+  if (!ts) return '';
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return Math.floor(secs / 60) + ' min ago';
+  if (secs < 86400) return Math.floor(secs / 3600) + ' hr ago';
+  return Math.floor(secs / 86400) + ' day(s) ago';
+}
+
+// ---- status ----
+async function loadStatus() {
+  let d;
+  try {
+    d = await (await fetch('/api/cameras/status')).json();
+  } catch (e) { d = { available: false, cameras: [] }; }
+  const key = JSON.stringify(d);
+  if (key === _last.status) return;
+  _last.status = key;
+  const dot = document.getElementById('sys-dot');
+  const txt = document.getElementById('sys-text');
+  if (d.available) {
+    dot.className = 'dot on';
+    txt.textContent = d.cameras.length + ' camera' + (d.cameras.length === 1 ? '' : 's') + ' online';
+  } else {
+    dot.className = 'dot off';
+    txt.textContent = 'camera system unavailable';
+  }
+}
+
+// ---- live snapshots ----
+// Polls a still frame per camera. Stills (not MJPEG) keep the kiosk calm and
+// avoid a permanent decode stream on the dashboard box.
+async function loadSnapshots() {
+  let cams = [];
+  try {
+    const s = await (await fetch('/api/cameras')).json();
+    cams = s.cameras || [];
+  } catch (e) { cams = []; }
+
+  const grid = document.getElementById('cam-grid');
+  const key = JSON.stringify(cams);
+
+  // Rebuild the shells only when the camera LIST changes.
+  if (key !== _last.camList) {
+    _last.camList = key;
+    if (!cams.length) {
+      grid.innerHTML = '<div class="cam"><div class="cam-foot">No cameras configured.</div></div>';
+      return;
+    }
+    grid.innerHTML = cams.map(c => `
+      <div class="cam">
+        <div class="cam-head">
+          <span class="cam-name">${esc(c)}</span>
+          <span class="cam-meta" id="meta-${esc(c)}"></span>
+        </div>
+        <img class="cam-img" id="img-${esc(c)}" alt="${esc(c)} live view">
+        <div class="cam-foot" id="foot-${esc(c)}">&nbsp;</div>
+      </div>`).join('');
+  }
+
+  // Refresh each frame. The <img> src carries a cache-busting stamp; a failed
+  // fetch just leaves the previous frame on screen (no flicker).
+  for (const c of cams) {
+    const img = document.getElementById('img-' + c);
+    if (!img) continue;
+    const url = '/api/cameras/' + encodeURIComponent(c) + '/snapshot.jpg?t=' + Date.now();
+    const probe = new Image();
+    probe.onload = () => {
+      if (img.dataset.stamp !== String(probe.src)) {
+        img.src = probe.src;
+        img.dataset.stamp = String(probe.src);
+        const foot = document.getElementById('foot-' + c);
+        if (foot) foot.textContent = 'updated ' + new Date().toLocaleTimeString();
+      }
+    };
+    probe.onerror = () => {
+      const foot = document.getElementById('foot-' + c);
+      if (foot) foot.textContent = 'no signal';
+    };
+    probe.src = url;
+  }
+}
+
+// ---- recent events ----
+async function loadEvents() {
+  let d = { events: [] };
+  try { d = await (await fetch('/api/cameras/events?hours=24&limit=12')).json(); }
+  catch (e) { d = { events: [] }; }
+  const key = JSON.stringify(d);
+  if (key === _last.events) return;
+  _last.events = key;
+
+  const el = document.getElementById('ev-list');
+  const evs = d.events || [];
+  if (!evs.length) {
+    el.innerHTML = '<div class="empty">No activity in the last 24 hours.</div>';
+    return;
+  }
+  el.innerHTML = evs.map(e => `
+    <div class="ev">
+      <span class="ev-label">${esc(e.label || 'object')}</span>
+      <span class="ev-time">${esc(relTime(e.start))}</span>
+      <span class="ev-cam">${esc(e.camera || '')}</span>
+    </div>`).join('');
+}
+
+function refreshAll() { loadStatus(); loadSnapshots(); loadEvents(); }
+
+refreshAll();
+setInterval(refreshAll, 3000);
+</script>
+</body>
+</html>

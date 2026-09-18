@@ -34,7 +34,11 @@ API_PROVIDERS = {
         "label": "Ollama Cloud",
         "base_url": OLLAMA_CLOUD_HOST,
         "format": "ollama",
-        "models": ["gemma4:31b", "qwen3.5:397b", "glm-5.2"],
+        # Vision + tool-calling verified 2026-09-16 against a live camera
+        # snapshot (64x64 colour test + real Reolink frame). gpt-oss:120b does
+        # NOT accept image input; minimax-m3 misread the colour test.
+        "models": ["deepseek-v4.1-flash", "glm-5.3-flash", "gemma4:31b",
+                   "qwen3.5:397b", "kimi-k3"],
     },
     "openai": {
         "label": "OpenAI",
@@ -270,14 +274,21 @@ def tool_format(settings):
 
 
 def assistant_message(content, tool_calls, fmt):
-    """Build the assistant-turn message dict for the given tool format."""
+    """Build the assistant-turn message dict for the given tool format.
+
+    The ollama python client validates this payload with pydantic and requires
+    `arguments` to be a DICT, not a JSON string (passing a string raises
+    ValidationError and kills every tool call). The OpenAI wire format wants a
+    JSON string instead, so only that branch stringifies.
+    """
     if fmt == "ollama":
         # Ollama Python client expects arguments as dict, not JSON string
         return {
             "role": "assistant",
             "content": content or "",
             "tool_calls": [
-                {"function": {"name": tc.name, "arguments": tc.arguments}}
+                {"function": {"name": tc.name,
+                              "arguments": dict(tc.arguments or {})}}
                 for tc in tool_calls
             ],
         }
@@ -285,10 +296,26 @@ def assistant_message(content, tool_calls, fmt):
         "role": "assistant",
         "content": content or None,
         "tool_calls": [
-            {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
+            {"id": tc.id, "type": "function",
+             "function": {"name": tc.name,
+                          "arguments": json.dumps(tc.arguments or {})}}
             for tc in tool_calls
         ],
     }
+
+
+def user_message(content, images=None):
+    """Build a user message, optionally carrying images for a vision model.
+
+    `images` is a list of base64-encoded JPEG/PNG strings (no data: prefix).
+    Ollama accepts `images` directly on the message. OpenAI-compatible
+    endpoints expect the content to be a parts array, which _chat_openai
+    converts when it sees `images` on a message.
+    """
+    msg = {"role": "user", "content": content or ""}
+    if images:
+        msg["images"] = list(images)
+    return msg
 
 
 def tool_result_message(tool_call, result, fmt):

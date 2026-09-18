@@ -278,6 +278,7 @@
   <button id="talk" onclick="talk()">🎤 Talk</button>
   <a class="footer-link" href="/meals.html" title="Meal plan">🍽️</a>
   <a class="footer-link" href="/grocery.html" title="Grocery list">🛒</a>
+  <a class="footer-link" href="/cameras.html" title="Cameras">📷</a>
 </footer>
 
 <!-- Member picker modal -->
@@ -375,6 +376,15 @@
     </div>
     <div class="field">
       <label class="check"><input type="checkbox" id="set-notify-news"> Show news feed (RSS)</label>
+    </div>
+    <div class="field">
+      <label class="check"><input type="checkbox" id="set-dev-mode"> <strong>Development mode</strong> — let the assistant read and change its own code</label>
+      <div id="dev-mode-note" style="font-size:.85rem;color:#9aa1ac;margin-top:.4rem;line-height:1.4">
+        When on, Ember can edit her own source files and restart the services.
+        Every change is committed to git and rolled back automatically if it breaks
+        something. Turn this off when you are done developing.
+      </div>
+      <div id="dev-status" style="font-size:.85rem;color:#9aa1ac;margin-top:.5rem"></div>
     </div>
     <div class="field">
       <label>News sources (RSS/Atom)</label>
@@ -902,6 +912,16 @@ async function loadNotes() {
   const key = JSON.stringify(d);
   if (key !== _last.notes) { _last.notes = key; document.getElementById('notes').innerHTML = html; }
 }
+async function loadDevStatus() {
+  try {
+    const d = await (await fetch('/api/dev/status')).json();
+    const el = document.getElementById('dev-status');
+    if (!el) return;
+    const svc = Object.entries(d.services || {}).map(([k, v]) => k + ': ' + v).join(' · ');
+    el.textContent = svc;
+  } catch (e) { /* dev status is informational only */ }
+}
+
 function refreshAll() { loadCalendar(); loadChores(); loadNotes(); loadFamily(); loadRewards(); loadPhotos(); loadLists(); }
 
 // ---- Edit modal (chores + calendar events) ----
@@ -1289,6 +1309,8 @@ function openSettings() {
   document.getElementById('set-sleep-enabled').checked = !!_settings.sleep_mode;
   document.getElementById('set-sleep-start').value = _settings.sleep_start || '22:00';
   document.getElementById('set-sleep-end').value = _settings.sleep_end || '06:00';
+  document.getElementById('set-dev-mode').checked = !!_settings.dev_mode;
+  loadDevStatus();
   renderMemberRows();
   renderCalConns();
   renderNewsFeeds();
@@ -1422,6 +1444,7 @@ async function saveSettings() {
     sleep_mode: document.getElementById('set-sleep-enabled').checked,
     sleep_start: document.getElementById('set-sleep-start').value,
     sleep_end: document.getElementById('set-sleep-end').value,
+    dev_mode: document.getElementById('set-dev-mode').checked,
     countdowns: _settings.countdowns || [],
   };
   // geocode the location to lat/lon

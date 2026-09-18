@@ -30,6 +30,8 @@ import numpy as np
 import sounddevice as sd
 
 import llm
+import cameras
+import devmode
 
 SAMPLE_RATE = 16000
 CHUNK = 1280  # 80ms @ 16kHz (openWakeWord default frame)
@@ -378,6 +380,69 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_cameras",
+            "description": "List the cameras available in the home camera system.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "look_at_camera",
+            "description": (
+                "Look at a camera's CURRENT live view and describe or answer a question about "
+                "what is visible right now. Use this when the user asks to see, look at, or "
+                "check something on a camera (e.g. 'is anyone in the living room', "
+                "'what does the porch look like', 'check if the dog is on the couch')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "camera": {
+                        "type": "string",
+                        "description": "Which camera to look at (e.g. 'reolink_e1', 'kiosk_webcam'). If unsure, call list_cameras first.",
+                    },
+                    "question": {
+                        "type": "string",
+                        "description": "What to determine from the view, in plain language.",
+                    },
+                },
+                "required": ["camera"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_activity",
+            "description": (
+                "Report recent DETECTED EVENTS (people, animals, vehicles) on the cameras over "
+                "a time window. Use this for questions about the past: 'did anyone come to the "
+                "door today', 'what happened while I was out yesterday', 'any activity "
+                "overnight'. For the current live scene, use look_at_camera instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "camera": {
+                        "type": "string",
+                        "description": "Optional camera name; omit to check all cameras.",
+                    },
+                    "hours": {
+                        "type": "number",
+                        "description": "How many hours back to look. Default 12. Use 24 for 'today', 48 for 'yesterday'.",
+                    },
+                    "person_only": {
+                        "type": "boolean",
+                        "description": "Only report people (ignores dogs, cats, cars).",
+                    },
+                },
+            },
+        },
+    },
 ]
 
 
@@ -611,6 +676,90 @@ def update_settings(changes):
     return applied
 
 
+DEV_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "dev_list_files",
+            "description": "Development mode: list Ember's own source files that may be edited.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dev_read_file",
+            "description": (
+                "Development mode: read one of Ember's source files, with line numbers. "
+                "Always read a file before editing it, and copy the exact text you intend "
+                "to replace."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "File path relative to the app directory, e.g. 'main.py' or 'static/index.html'"},
+                    "start": {"type": "integer", "description": "Optional first line (1-based)"},
+                    "end": {"type": "integer", "description": "Optional last line"},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dev_patch_file",
+            "description": (
+                "Development mode: replace one exact snippet in Ember's source, then commit "
+                "and restart the affected service. Auto-rolls-back if the service fails. "
+                "The old text must appear exactly once in the file."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "File path, e.g. 'static/index.html'"},
+                    "old_string": {"type": "string", "description": "The exact existing text to replace (copy it from dev_read_file)"},
+                    "new_string": {"type": "string", "description": "The replacement text"},
+                    "summary": {"type": "string", "description": "Short description of the change for the git commit"},
+                    "service": {"type": "string", "description": "Which service serves this file: 'dashboard-backend.service' for main.py/static pages, 'ember-voice.service' for voice_assistant.py"},
+                },
+                "required": ["path", "old_string", "new_string"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dev_status",
+            "description": "Development mode: check whether Ember's services are running, and list recent changes.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dev_restart_service",
+            "description": "Development mode: restart a service to apply changes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service": {"type": "string", "description": "'dashboard-backend.service' or 'ember-voice.service'"},
+                },
+                "required": ["service"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dev_undo_last",
+            "description": "Development mode: undo the most recent source change and restore the previous version.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+]
+
+
 def run_tool(name, args):
     if name == "add_note":
         add_note(args.get("text", ""))
@@ -661,9 +810,75 @@ def run_tool(name, args):
     elif name == "update_settings":
         applied = update_settings(args.get("changes", {}))
         return json.dumps({"updated": applied})
+    elif name == "list_cameras":
+        cams = cameras.list_cameras()
+        if not cams:
+            return "The camera system is not responding, or no cameras are configured."
+        return "Available cameras: " + ", ".join(cams) + "."
+    elif name == "look_at_camera":
+        return _tool_look_at_camera(args)
+    elif name == "check_activity":
+        hours = float(args.get("hours") or 12)
+        person_only = bool(args.get("person_only"))
+        cam = args.get("camera") or None
+        if cam:
+            resolved = cameras.resolve_camera(cam)
+            cam = resolved or cam
+        return cameras.activity_summary(cam, hours=hours, person_only=person_only)
+    # --- development mode (registered only when dev_mode is on) -------------
+    elif name == "dev_list_files":
+        return "Editable files: " + ", ".join(devmode.list_files())
+    elif name == "dev_read_file":
+        return devmode.read_file(args.get("path", ""),
+                                 args.get("start"), args.get("end"))
+    elif name == "dev_patch_file":
+        return devmode.patch_file(
+            args.get("path", ""),
+            args.get("old_string", ""),
+            args.get("new_string", ""),
+            summary=args.get("summary", ""),
+            svc=args.get("service") or None,
+        )
+    elif name == "dev_status":
+        return json.dumps({"services": devmode.status(),
+                           "recent_changes": devmode.recent_changes(6)})
+    elif name == "dev_restart_service":
+        return devmode.restart(args.get("service", ""))[1]
+    elif name == "dev_undo_last":
+        return devmode.undo_last()
     else:
         print(f"[tool] unknown tool: {name}", flush=True)
         return "unknown"
+
+
+# Set by _tool_look_at_camera when a live frame should be attached to the next
+# model turn. Reset by describe() before each request.
+_PENDING_IMAGE = None
+
+
+def _tool_look_at_camera(args):
+    """Grab a live frame and stash it so the model can actually SEE it.
+
+    Returns a text status for the tool-result turn; the image rides along on
+    the next user message (Ollama can't attach images to a tool result).
+    """
+    global _PENDING_IMAGE
+    spoken = (args.get("camera") or "").strip()
+    cam = cameras.resolve_camera(spoken)
+    if not cam:
+        cams = cameras.list_cameras()
+        if not cams:
+            return "The camera system is not responding right now."
+        return ("I don't have a camera called '%s'. Available: %s."
+                % (spoken, ", ".join(cams)))
+    img, err = cameras.look(cam)
+    if not img:
+        return err or f"I couldn't get a picture from {cam} right now."
+    _PENDING_IMAGE = {"camera": cam, "b64": img,
+                      "question": (args.get("question") or "").strip()}
+    print(f"[camera] captured frame from {cam} for vision", flush=True)
+    return (f"Live frame captured from {cam}. The image is attached to the "
+            f"next message — describe what you actually see in it.")
 
 
 def confirmation_for(results):
@@ -828,7 +1043,7 @@ def _build_system_prompt():
     today = datetime.now().strftime("%A, %B %d, %Y")
     settings = _load_settings()
     name = settings.get("assistant_name") or ASSISTANT_NAME
-    return (
+    system = (
         f"Today is {today}. You are {name}, the warm, self-hosted family assistant — the light from within the home. "
         "You help the family stay organized and connected. "
         "You are speaking out loud through a speaker, in a real conversation. The user may respond to "
@@ -856,16 +1071,38 @@ def _build_system_prompt():
         "When they ask to remove something from the grocery list, first use list_grocery to find the exact item, "
         "then use remove_grocery_item with that text. "
         "When the user asks about the meal plan, use get_meal_plan to read it, set_meal to set a specific day's meal, "
-        "or suggest_meals to propose a weekly plan."
+        "or suggest_meals to propose a weekly plan. "
+        "You have access to the home cameras. Use list_cameras to see what exists. "
+        "Use look_at_camera when the user asks about what is happening RIGHT NOW on a camera "
+        "(what you see, whether someone is there, what something looks like) — a live picture is "
+        "attached and you describe only what is actually visible in it. "
+        "Use check_activity for questions about the PAST (did anyone come to the door, what "
+        "happened yesterday, any activity overnight); it reports detected events over a time window. "
+        "Never invent camera details: if a tool returns no events or no picture, say so plainly."
     )
-
-
+    if devmode.is_enabled(settings):
+        system += (
+            " DEVELOPMENT MODE IS ON. You may read and change your own source code. "
+            "To change behaviour: read the file first with dev_read_file (copy the exact "
+            "text), then dev_patch_file with the smallest snippet that needs to change and "
+            "the file's service (dashboard-backend.service for main.py or static pages, "
+            "ember-voice.service for voice_assistant.py). The edit is committed to git and "
+            "the service restarted automatically; if it fails to come back you roll it back "
+            "yourself. Make ONE focused change at a time and confirm it works before the next. "
+            "Never invent code you have not read. If a change is large or risky, say what you "
+            "would do and ask first."
+        )
+    return system
 class Conversation:
     """Holds the running message history for one wake-word session.
 
-   multi-turn: after Ember speaks, the loop can feed the next user
+    multi-turn: after Ember speaks, the loop can feed the next user
     utterance into the same Conversation so clarifications ("which day?",
     "did you mean tomorrow?") work without re-waking.
+
+    Dev mode: when development mode is on, the dev_* tools are registered alongside
+    the normal ones, and the tool loop runs longer because dev work chains
+    (read -> patch -> verify) rather than completing in one round.
     """
 
     def __init__(self):
@@ -875,11 +1112,15 @@ class Conversation:
         """Send one user utterance, run any tool rounds, return the spoken reply."""
         settings = _load_settings()
         fmt = llm.tool_format(settings)
+        dev_on = devmode.is_enabled(settings)
+        active_tools = TOOLS + (DEV_TOOLS if dev_on else [])
+        # 8 rounds when dev mode is on (read -> patch -> verify chains); 4 otherwise.
+        rounds = 8 if dev_on else 4
         self.messages.append({"role": "user", "content": text})
         last_results = []
-        for _ in range(4):  # allow up to 4 tool rounds (list -> delete -> confirm)
+        for _ in range(rounds):
             try:
-                resp = llm.chat(self.messages, settings=settings, tools=TOOLS)
+                resp = llm.chat(self.messages, settings=settings, tools=active_tools)
             except Exception as e:
                 # Never die silently: speak the failure so the user knows.
                 print(f"[llm] error: {e}", flush=True)
@@ -904,8 +1145,19 @@ class Conversation:
                 status = run_tool(name, args)
                 last_results.append((name, status))
                 self.messages.append(llm.tool_result_message(tc, status, fmt))
+            # A camera frame was captured this round: attach it so the model can
+            # actually look at it. Ollama cannot put images on a tool result, so it
+            # rides on an extra user turn instead.
+            global _PENDING_IMAGE
+            if _PENDING_IMAGE:
+                shot = _PENDING_IMAGE
+                _PENDING_IMAGE = None
+                q = shot.get("question") or "Describe what you see in this live camera view."
+                self.messages.append(llm.user_message(
+                    f"[live image from {shot['camera']}] {q}", images=[shot["b64"]]))
         # If we exhausted rounds, fall back to a confirmation phrase
         return confirmation_for(last_results) or "Done."
+
 
 
 # ---------------------------------------------------------------------------

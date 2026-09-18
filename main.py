@@ -6,9 +6,12 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import llm
+import cameras
+import devmode
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -94,6 +97,9 @@ DEFAULT_SETTINGS = {
     "llm_base_url": "",               # override for the API endpoint
     "llm_api_key": "",                # stored locally; never returned by the API
     "llm_num_ctx": 32768,             # context window (tokens); gemma4:31b supports up to 256K
+    # Development mode — lets the assistant read and rewrite its own source.
+    # Off by default: when off, the dev tools are never offered to the model.
+    "dev_mode": False,
     # Home management (Phase 5)
     "pin": "",                     # 4-digit parental PIN (empty = no lock)
     "sleep_mode": False,            # dim screen + pause feed during sleep hours
@@ -191,6 +197,69 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_cameras",
+            "description": "List the cameras available in the home camera system.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "look_at_camera",
+            "description": (
+                "Look at a camera's CURRENT live view and describe or answer a question about "
+                "what is visible right now. Use this when the user asks to see, look at, or "
+                "check something on a camera (e.g. 'is anyone in the living room', "
+                "'what does the porch look like', 'check if the dog is on the couch')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "camera": {
+                        "type": "string",
+                        "description": "Which camera to look at (e.g. 'reolink_e1', 'kiosk_webcam'). If unsure, call list_cameras first.",
+                    },
+                    "question": {
+                        "type": "string",
+                        "description": "What to determine from the view, in plain language.",
+                    },
+                },
+                "required": ["camera"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_activity",
+            "description": (
+                "Report recent DETECTED EVENTS (people, animals, vehicles) on the cameras over "
+                "a time window. Use this for questions about the past: 'did anyone come to the "
+                "door today', 'what happened while I was out yesterday', 'any activity "
+                "overnight'. For the current live scene, use look_at_camera instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "camera": {
+                        "type": "string",
+                        "description": "Optional camera name; omit to check all cameras.",
+                    },
+                    "hours": {
+                        "type": "number",
+                        "description": "How many hours back to look. Default 12. Use 24 for 'today', 48 for 'yesterday'.",
+                    },
+                    "person_only": {
+                        "type": "boolean",
+                        "description": "Only report people (ignores dogs, cats, cars).",
+                    },
+                },
+            },
+        },
+    },
 ]
 
 
@@ -230,29 +299,128 @@ def _run_tool(name, args):
         events = _load("calendar.json", [])
         events.append({"title": args.get("title", ""), "day": args.get("day", ""), "time": args.get("time", "")})
         _save("calendar.json", events)
+    elif name == "list_cameras":
+        cams = cameras.list_cameras()
+        if not cams:
+            return "The camera system is not responding, or no cameras are configured."
+        return "Available cameras: " + ", ".join(cams) + "."
+    elif name == "look_at_camera":
+        return _tool_look_at_camera(args)
+    elif name == "check_activity":
+        hours = float(args.get("hours") or 12)
+        person_only = bool(args.get("person_only"))
+        cam = args.get("camera") or None
+        if cam:
+            cam = cameras.resolve_camera(cam) or cam
+        return cameras.activity_summary(cam, hours=hours, person_only=person_only)
+    return None
+
+
+# Set by _tool_look_at_camera; consumed by the chat loop so the captured frame
+# can be attached to the next model turn (tool results carry no images).
+_PENDING_IMAGE = None
+
+
+def _tool_look_at_camera(args):
+    """Capture a live frame and stash it for the vision turn."""
+    global _PENDING_IMAGE
+    spoken = (args.get("camera") or "").strip()
+    cam = cameras.resolve_camera(spoken)
+    if not cam:
+        cams = cameras.list_cameras()
+        if not cams:
+            return "The camera system is not responding right now."
+        return ("I don't have a camera called '%s'. Available: %s."
+                % (spoken, ", ".join(cams)))
+    img, err = cameras.look(cam)
+    if not img:
+        return err or f"I couldn't get a picture from {cam} right now."
+    _PENDING_IMAGE = {"camera": cam, "b64": img,
+                      "question": (args.get("question") or "").strip()}
+    return (f"Live frame captured from {cam}. The image is attached to the "
+            f"next message — describe what you actually see in it.")
 
 
 @app.post("/api/chat")
 def api_chat(req: ChatRequest):
+    global _PENDING_IMAGE
+    _PENDING_IMAGE = None
     today = datetime.now().strftime("%A, %B %d, %Y")
     settings = _load_settings()
-    provider = settings.get("llm_provider") or "local"
     messages = [
-        {"role": "system", "content": f"Today is {today}. You are Ember, the warm, self-hosted family assistant — the light from within the home. You help the family stay organized and connected. Answer in one short sentence, warm and plain-spoken. No emoji. When the user asks you to add a note, chore, or calendar event, use the appropriate tool to actually save it. For calendar events, resolve relative dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year."},
+        {"role": "system", "content": f"Today is {today}. You are Ember, the warm, self-hosted family assistant — the light from within the home. You help the family stay organized and connected. Answer in one short sentence, warm and plain-spoken. No emoji. When the user asks you to add a note, chore, or calendar event, use the appropriate tool to actually save it. For calendar events, resolve relative dates (like 'Friday' or 'tomorrow') against today's date ({today}); never default to a past year. You have access to the home cameras: use list_cameras to see what exists, look_at_camera to see what is happening RIGHT NOW (a live picture is attached and you describe only what is actually visible), and check_activity for questions about the past such as whether anyone came to the door or what happened yesterday. Never invent camera details; if a tool returns nothing, say so plainly."},
         {"role": "user", "content": req.content},
     ]
-    resp = llm.chat(messages, settings=settings, tools=TOOLS)
-    if resp.tool_calls:
+    fmt = llm.tool_format(settings)
+    for _ in range(4):
+        resp = llm.chat(messages, settings=settings, tools=TOOLS)
+        if not resp.tool_calls:
+            return {"reply": resp.content}
+        messages.append(llm.assistant_message(resp.content, resp.tool_calls, fmt))
         for tc in resp.tool_calls:
-            _run_tool(tc.name, tc.arguments)
-        return {"reply": "Done."}
-    return {"reply": resp.content}
+            result = _run_tool(tc.name, tc.arguments)
+            messages.append(llm.tool_result_message(tc, result, fmt))
+        # Attach any freshly captured camera frame so the model can see it.
+        if _PENDING_IMAGE:
+            shot = _PENDING_IMAGE
+            _PENDING_IMAGE = None
+            q = shot.get("question") or "Describe what you see in this live camera view."
+            messages.append(llm.user_message(
+                f"[live image from {shot['camera']}] {q}", images=[shot["b64"]]))
+    return {"reply": "Sorry, I could not finish that request."}
 
 
 @app.get("/api/chores")
 def get_chores():
     return _load("chores.json", [])
 
+
+# ---------------------------------------------------------------------------
+# Cameras (Frigate)
+# ---------------------------------------------------------------------------
+@app.get("/api/cameras")
+def api_cameras():
+    """Camera list, for the Cameras page."""
+    cams = cameras.list_cameras()
+    return {"cameras": cams}
+
+
+@app.get("/api/cameras/status")
+def api_cameras_status():
+    """System availability + which cameras report frames."""
+    if not cameras.is_available():
+        return {"available": False, "cameras": []}
+    cams = cameras.list_cameras()
+    online = [c for c in cams if cameras.camera_online(c)]
+    return {"available": True, "cameras": online, "all": cams}
+
+
+@app.get("/api/cameras/events")
+def api_cameras_events(hours: float = 24, limit: int = 12, camera: str = None):
+    """Recent detection events, newest first."""
+    return {"events": cameras.get_events(camera, hours=hours, limit=limit)}
+
+
+@app.get("/api/cameras/{name}/snapshot.jpg")
+def api_camera_snapshot(name: str, height: int = 720):
+    """Latest still frame. Used by the dashboard tiles (and vision tools)."""
+    data = cameras.snapshot_bytes(name, height=height)
+    if not data:
+        return Response(content=b"", status_code=503, media_type="image/jpeg")
+    return Response(content=data, media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
+
+
+# ---------------------------------------------------------------------------
+# Development mode
+# ---------------------------------------------------------------------------
+@app.get("/api/dev/status")
+def api_dev_status():
+    """Service health + recent self-edits. Safe to call with dev mode off."""
+    settings = _load_settings()
+    return {"dev_mode": devmode.is_enabled(settings),
+            "services": devmode.status(),
+            "recent_changes": devmode.recent_changes(8)}
 
 @app.post("/api/chores")
 async def add_chore(request: Request):
