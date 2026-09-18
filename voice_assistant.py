@@ -903,8 +903,19 @@ def confirmation_for(results):
     return " ".join(parts) if parts else "Done."
 
 
+def ask_llm(text):
+    """One-shot entry point: ask a single question and return the spoken reply.
+
+    Kept because the camera and dev-mode test scripts (test_camera_tools.py,
+    test_devmode.py) drive this path directly with a text string and no wake word.
+    Internally it is just a throwaway Conversation, so the tool loop, dev tools and
+    camera-frame handling are identical to a real spoken turn.
+    """
+    return Conversation().ask(text)
+
+
 def handle_tool_calls(msg):
-    """Legacy single-round helper — no longer used (ask_llm now loops internally)."""
+    """Legacy single-round helper — no longer used (the Conversation loop handles tools)."""
     tool_calls = getattr(msg, "tool_calls", None)
     if not tool_calls:
         return msg.content or ""
